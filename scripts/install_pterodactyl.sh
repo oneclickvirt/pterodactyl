@@ -212,7 +212,6 @@ done < ".env.example"
 cp .env.example .env
 composer install --no-dev --optimize-autoloader
 php artisan key:generate --force
-
 # php artisan p:environment:setup
 # php artisan p:environment:database
 # # php artisan p:environment:mail
@@ -249,7 +248,6 @@ RestartSec=5s
 [Install]
 WantedBy=multi-user.target
 EOL
-    systemctl enable --now pteroq.service
 elif [[ "${RELEASE[int]}" == "CentOS" ]]; then
     cat <<EOL > /etc/systemd/system/pteroq.service
 # Pterodactyl Queue Worker File
@@ -271,7 +269,66 @@ RestartSec=5s
 [Install]
 WantedBy=multi-user.target
 EOL
-    systemctl enable --now pteroq.service
-    systemctl enable --now redis.service
 fi
+systemctl enable --now pteroq.service
+systemctl enable --now redis.service
+systemctl enable nginx
+systemctl enable mariadb
+systemctl enable php8.1-fpm
+systemctl enable redis-server
+rm /etc/nginx/sites-enabled/default
+if [[ "${RELEASE[int]}" == "Debian" || "${RELEASE[int]}" == "Ubuntu" ]]; then
+    nginx_config_path="/etc/nginx/sites-available/pterodactyl.conf"
+elif [[ "${RELEASE[int]}" == "CentOS" ]]; then
+    nginx_config_path="/etc/nginx/conf.d/pterodactyl.conf"
+fi
+config="
+server {
+    listen 80;
+    server_name $IPV4;
 
+    root /var/www/pterodactyl/public;
+    index index.html index.htm index.php;
+    charset utf-8;
+
+    location / {
+        try_files \$uri \$uri/ /index.php?\$query_string;
+    }
+
+    location = /favicon.ico { access_log off; log_not_found off; }
+    location = /robots.txt  { access_log off; log_not_found off; }
+
+    access_log off;
+    error_log  /var/log/nginx/pterodactyl.app-error.log error;
+
+    client_max_body_size 100m;
+    client_body_timeout 120s;
+    sendfile off;
+
+    location ~ \.php$ {
+        fastcgi_split_path_info ^(.+\.php)(/.+)$;
+        fastcgi_pass unix:/run/php/php8.1-fpm.sock;
+        fastcgi_index index.php;
+        include fastcgi_params;
+        fastcgi_param PHP_VALUE \"upload_max_filesize = 100M \n post_max_size=100M\";
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        fastcgi_param HTTP_PROXY \"\";
+        fastcgi_intercept_errors off;
+        fastcgi_buffer_size 16k;
+        fastcgi_buffers 4 16k;
+        fastcgi_connect_timeout 300;
+        fastcgi_send_timeout 300;
+        fastcgi_read_timeout 300;
+    }
+
+    location ~ /\.ht {
+        deny all;
+    }
+}
+"
+echo "$config" > "$nginx_config_path"
+if [[ "${RELEASE[int]}" != "CentOS" ]]; then
+    ln -s "$nginx_config_path" /etc/nginx/sites-enabled/pterodactyl.conf
+fi
+nginx -t
+systemctl restart nginx
