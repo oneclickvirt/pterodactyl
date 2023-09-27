@@ -95,7 +95,7 @@ if [[ "${RELEASE[int]}" == "Debian" || "${RELEASE[int]}" == "Ubuntu" ]]; then
     apt-get install mariadb-server
     if [ $? -ne 0 ]; then
         curl -sS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash
-        apt-get install mariadb-server
+        apt-get -y install mariadb-server
     fi
     ubuntu_version=$(lsb_release -rs)
     if [ "$ubuntu_version" == "18.04" ]; then
@@ -119,7 +119,7 @@ elif [[ "${RELEASE[int]}" == "CentOS" ]]; then
         echo "gpgcheck=1" | tee -a /etc/yum.repos.d/redis.repo
         echo "gpgkey=file:///etc/pki/rpm-gpg/redis-archive-keyring.gpg" | tee -a /etc/yum.repos.d/redis.repo
     fi
-    yum install mariadb-server
+    yum -y install mariadb-server
     if [ $? -ne 0 ]; then
         curl -sS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash
         yum install mariadb-server
@@ -153,7 +153,9 @@ php artisan p:environment:setup
 php artisan p:environment:database
 # php artisan p:environment:mail
 php artisan migrate --seed --force
-echo "oneclick123" | php artisan p:user:make
+_green "At this time passwords must meet the following requirements: 8 characters, mixed case, at least one number."
+_green "密码必须满足以下要求：8个字符，大小写混合，至少1个数字"
+php artisan p:user:make
 if [[ "${RELEASE[int]}" == "Debian" || "${RELEASE[int]}" == "Ubuntu" ]]; then
     chown -R www-data:www-data /var/www/pterodactyl/*
 elif [[ "${RELEASE[int]}" == "CentOS" ]]; then
