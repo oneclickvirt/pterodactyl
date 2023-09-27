@@ -85,7 +85,14 @@ if ! command -v git >/dev/null 2>&1; then
 fi
 if [[ "${RELEASE[int]}" == "Debian" || "${RELEASE[int]}" == "Ubuntu" ]]; then
     apt-get -y install software-properties-common curl apt-transport-https ca-certificates gnupg
-    LC_ALL=C.UTF-8 add-apt-repository -y ppa:ondrej/php
+    if [[ "${RELEASE[int]}" == "Ubuntu" ]]; then
+        LC_ALL=C.UTF-8 add-apt-repository -y ppa:ondrej/php
+    else
+        if [ ! -d /etc/apt/sources.list.d/sury-php.list ]; then
+            echo "deb https://packages.sury.org/php/ $(lsb_release -sc) main" | tee /etc/apt/sources.list.d/sury-php.list
+        fi
+        wget -qO - https://packages.sury.org/php/apt.gpg | apt-key add -
+    fi
     if [ ! -d /usr/share/keyrings/redis-archive-keyring.gpg ]; then
         curl -fsSL https://packages.redis.io/gpg | gpg --dearmor -o /usr/share/keyrings/redis-archive-keyring.gpg
     fi
@@ -102,7 +109,10 @@ if [[ "${RELEASE[int]}" == "Debian" || "${RELEASE[int]}" == "Ubuntu" ]]; then
         apt-add-repository universe
     fi
     check_update
-    apt-get -y install php8.1 php8.1-{common,cli,gd,mysql,mbstring,bcmath,xml,fpm,curl,zip} nginx redis-server
+    if [[ "${RELEASE[int]}" == "Ubuntu" ]]; then
+        apt-get -y install php8.1 php8.1-{common,cli,gd,mysql,mbstring,bcmath,xml,fpm,curl,zip} nginx redis-server
+    fi
+    
 elif [[ "${RELEASE[int]}" == "CentOS" ]]; then
     yum -y install epel-release curl
     yum -y install https://rpms.remirepo.net/enterprise/remi-release-8.rpm
@@ -146,9 +156,9 @@ database_name="panel"
 echo "CREATE USER 'pterodactyl'@'127.0.0.1' IDENTIFIED BY '$mysql_password';" > create_user.sql
 echo "CREATE DATABASE $database_name;" >> create_user.sql
 echo "GRANT ALL PRIVILEGES ON $database_name.* TO 'pterodactyl'@'127.0.0.1' WITH GRANT OPTION;" >> create_user.sql
-mysql -u $mysql_user -p $mysql_password < create_user.sql
+mysql -u $mysql_user -p$mysql_password < create_user.sql
 rm create_user.sql
-mysql -u $mysql_user -p $mysql_password -e "exit"
+mysql -u $mysql_user -p$mysql_password -e "exit"
 cp .env.example .env
 composer install --no-dev --optimize-autoloader
 php artisan key:generate --force
