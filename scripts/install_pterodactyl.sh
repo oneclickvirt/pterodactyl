@@ -109,10 +109,7 @@ if [[ "${RELEASE[int]}" == "Debian" || "${RELEASE[int]}" == "Ubuntu" ]]; then
         apt-add-repository universe
     fi
     check_update
-    if [[ "${RELEASE[int]}" == "Ubuntu" ]]; then
-        apt-get -y install php8.1 php8.1-{common,cli,gd,mysql,mbstring,bcmath,xml,fpm,curl,zip} nginx redis-server
-    fi
-    
+    apt-get -y install php8.1 php8.1-{common,cli,gd,mysql,mbstring,bcmath,xml,fpm,curl,zip} nginx redis-server
 elif [[ "${RELEASE[int]}" == "CentOS" ]]; then
     yum -y install epel-release curl
     yum -y install https://rpms.remirepo.net/enterprise/remi-release-8.rpm
