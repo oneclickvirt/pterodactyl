@@ -163,6 +163,7 @@ php artisan p:environment:setup
 php artisan p:environment:database
 # php artisan p:environment:mail
 php artisan migrate --seed --force
+_blue "设置管理员用户 - Setting up the administrator user"
 _green "At this time passwords must meet the following requirements: 8 characters, mixed case, at least one number."
 _green "密码必须满足以下要求：8个字符，大小写混合，至少1个数字"
 php artisan p:user:make
