@@ -209,6 +209,12 @@ while IFS= read -r line; do
     break
   fi
 done < ".env.example"
+while IFS= read -r line; do
+  if [[ "$line" == "APP_ENVIRONMENT_ONLY="* ]]; then
+    sed -i 's/^APP_ENVIRONMENT_ONLY=.*/APP_ENVIRONMENT_ONLY=false/' ".env.example"
+    break
+  fi
+done < ".env.example"
 cp .env.example .env
 composer install --no-dev --optimize-autoloader
 php artisan key:generate --force
