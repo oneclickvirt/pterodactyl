@@ -156,12 +156,25 @@ echo "GRANT ALL PRIVILEGES ON $database_name.* TO 'pterodactyl'@'127.0.0.1' WITH
 mysql -u $mysql_user -p$mysql_password < create_user.sql
 rm create_user.sql
 mysql -u $mysql_user -p$mysql_password -e "exit"
+while IFS= read -r line; do
+  if [[ "$line" == "APP_URL="* ]]; then
+    sed -i 's/^APP_URL=.*/APP_URL="http:\/\/'"${IPV4}"':80\/"/' ".env.example"
+    break
+  fi
+done < ".env.example"
+while IFS= read -r line; do
+  if [[ "$line" == "DB_PASSWORD="* ]]; then
+    sed -i 's/^DB_PASSWORD=.*/DB_PASSWORD='"${mysql_password}"'/' ".env.example"
+    break
+  fi
+done < ".env.example"
 cp .env.example .env
 composer install --no-dev --optimize-autoloader
 php artisan key:generate --force
-php artisan p:environment:setup
-php artisan p:environment:database
-# php artisan p:environment:mail
+
+# php artisan p:environment:setup
+# php artisan p:environment:database
+# # php artisan p:environment:mail
 php artisan migrate --seed --force
 _blue "设置管理员用户 - Setting up the administrator user"
 _green "At this time passwords must meet the following requirements: 8 characters, mixed case, at least one number."
