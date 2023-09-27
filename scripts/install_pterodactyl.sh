@@ -64,7 +64,7 @@ check_update() {
 if [[ "${RELEASE[int]}" != "Debian" && "${RELEASE[int]}" != "Ubuntu" && "${RELEASE[int]}" != "CentOS" ]]; then
     exit 1
 else
-    mysql_password="oneclickvirt123"
+    mysql_password="oneclick123"
 fi
 check_update
 if ! command -v curl >/dev/null 2>&1; then
