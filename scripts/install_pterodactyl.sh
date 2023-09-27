@@ -92,7 +92,7 @@ if [[ "${RELEASE[int]}" == "Debian" || "${RELEASE[int]}" == "Ubuntu" ]]; then
     if [ ! -d /etc/apt/sources.list.d/redis.list ]; then
         echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/redis.list
     fi
-    apt-get install mariadb-server
+    apt-get -y install mariadb-server
     if [ $? -ne 0 ]; then
         curl -sS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash
         apt-get -y install mariadb-server
@@ -122,7 +122,7 @@ elif [[ "${RELEASE[int]}" == "CentOS" ]]; then
     yum -y install mariadb-server
     if [ $? -ne 0 ]; then
         curl -sS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash
-        yum install mariadb-server
+        yum -y install mariadb-server
     fi
     check_update
     yum -y install php php-{common,cli,gd,mysql,mbstring,bcmath,xml,fpm,curl,zip} nginx redis
