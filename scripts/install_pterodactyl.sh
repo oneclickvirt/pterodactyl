@@ -86,27 +86,46 @@ fi
 if [[ "${RELEASE[int]}" == "Debian" || "${RELEASE[int]}" == "Ubuntu" ]]; then
     apt-get -y install software-properties-common curl apt-transport-https ca-certificates gnupg
     LC_ALL=C.UTF-8 add-apt-repository -y ppa:ondrej/php
-    curl -fsSL https://packages.redis.io/gpg | gpg --dearmor -o /usr/share/keyrings/redis-archive-keyring.gpg
-    echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/redis.list
-    curl -sS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash
+    if [ ! -d /usr/share/keyrings/redis-archive-keyring.gpg ]; then
+        curl -fsSL https://packages.redis.io/gpg | gpg --dearmor -o /usr/share/keyrings/redis-archive-keyring.gpg
+    fi
+    if [ ! -d /etc/apt/sources.list.d/redis.list ]; then
+        echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/redis.list
+    fi
+    apt-get install mariadb-server
+    if [ $? -ne 0 ]; then
+        curl -sS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash
+        apt-get install mariadb-server
+    fi
+    ubuntu_version=$(lsb_release -rs)
+    if [ "$ubuntu_version" == "18.04" ]; then
+        apt-add-repository universe
+    fi
     check_update
-    apt-add-repository universe
-    apt-get -y install php8.1 php8.1-{common,cli,gd,mysql,mbstring,bcmath,xml,fpm,curl,zip} mariadb-server nginx redis-server
+    apt-get -y install php8.1 php8.1-{common,cli,gd,mysql,mbstring,bcmath,xml,fpm,curl,zip} nginx redis-server
 elif [[ "${RELEASE[int]}" == "CentOS" ]]; then
     yum -y install epel-release curl
     yum -y install https://rpms.remirepo.net/enterprise/remi-release-8.rpm
     yum -y install yum-utils
     yum-config-manager --disable remi-php54
     yum-config-manager --enable remi-php81
-    curl -fsSL https://packages.redis.io/gpg | gpg --dearmor -o /etc/pki/rpm-gpg/redis-archive-keyring.gpg
-    echo "[redis]" | tee /etc/yum.repos.d/redis.repo
-    echo "name=Redis" | tee -a /etc/yum.repos.d/redis.repo
-    echo "baseurl=https://packages.redis.io/rpm" | tee -a /etc/yum.repos.d/redis.repo
-    echo "gpgcheck=1" | tee -a /etc/yum.repos.d/redis.repo
-    echo "gpgkey=file:///etc/pki/rpm-gpg/redis-archive-keyring.gpg" | tee -a /etc/yum.repos.d/redis.repo
-    curl -sS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash
+    if [ ! -d /etc/pki/rpm-gpg/redis-archive-keyring.gpg ]; then
+        curl -fsSL https://packages.redis.io/gpg | gpg --dearmor -o /etc/pki/rpm-gpg/redis-archive-keyring.gpg
+    fi
+    if [ ! -d /etc/yum.repos.d/redis.repo ]; then
+        echo "[redis]" | tee /etc/yum.repos.d/redis.repo
+        echo "name=Redis" | tee -a /etc/yum.repos.d/redis.repo
+        echo "baseurl=https://packages.redis.io/rpm" | tee -a /etc/yum.repos.d/redis.repo
+        echo "gpgcheck=1" | tee -a /etc/yum.repos.d/redis.repo
+        echo "gpgkey=file:///etc/pki/rpm-gpg/redis-archive-keyring.gpg" | tee -a /etc/yum.repos.d/redis.repo
+    fi
+    yum install mariadb-server
+    if [ $? -ne 0 ]; then
+        curl -sS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash
+        yum install mariadb-server
+    fi
     check_update
-    yum -y install php php-{common,cli,gd,mysql,mbstring,bcmath,xml,fpm,curl,zip} mariadb-server nginx redis
+    yum -y install php php-{common,cli,gd,mysql,mbstring,bcmath,xml,fpm,curl,zip} nginx redis
     systemctl start mariadb
     systemctl enable mariadb
     systemctl start nginx
