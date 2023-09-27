@@ -61,6 +61,46 @@ check_update() {
     fi
 }
 
+is_private_ipv4() {
+    local ip_address=$1
+    local ip_parts
+    if [[ -z $ip_address ]]; then
+        return 0 # 输入为空
+    fi
+    IFS='.' read -r -a ip_parts <<<"$ip_address"
+    # 检查IP地址是否符合内网IP地址的范围
+    # 去除 回环，RFC 1918，多播，RFC 6598 地址
+    if [[ ${ip_parts[0]} -eq 10 ]] ||
+        [[ ${ip_parts[0]} -eq 172 && ${ip_parts[1]} -ge 16 && ${ip_parts[1]} -le 31 ]] ||
+        [[ ${ip_parts[0]} -eq 192 && ${ip_parts[1]} -eq 168 ]] ||
+        [[ ${ip_parts[0]} -eq 127 ]] ||
+        [[ ${ip_parts[0]} -eq 0 ]] ||
+        [[ ${ip_parts[0]} -eq 100 && ${ip_parts[1]} -ge 64 && ${ip_parts[1]} -le 127 ]] ||
+        [[ ${ip_parts[0]} -ge 224 ]]; then
+        return 0 # 是内网IP地址
+    else
+        return 1 # 不是内网IP地址
+    fi
+}
+
+check_ipv4() {
+    IPV4=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
+    if is_private_ipv4 "$IPV4"; then # 由于是内网IPV4地址，需要通过API获取外网地址
+        IPV4=""
+        local API_NET=("ipv4.ip.sb" "ipget.net" "ip.ping0.cc" "https://ip4.seeip.org" "https://api.my-ip.io/ip" "https://ipv4.icanhazip.com" "api.ipify.org")
+        for p in "${API_NET[@]}"; do
+            response=$(curl -s4m8 "$p")
+            sleep 1
+            if [ $? -eq 0 ] && ! echo "$response" | grep -q "error"; then
+                IP_API="$p"
+                IPV4="$response"
+                break
+            fi
+        done
+    fi
+    export IPV4
+}
+
 if [[ "${RELEASE[int]}" != "Debian" && "${RELEASE[int]}" != "Ubuntu" && "${RELEASE[int]}" != "CentOS" ]]; then
     exit 1
 else
@@ -156,6 +196,7 @@ echo "GRANT ALL PRIVILEGES ON $database_name.* TO 'pterodactyl'@'127.0.0.1' WITH
 mysql -u $mysql_user -p$mysql_password < create_user.sql
 rm create_user.sql
 mysql -u $mysql_user -p$mysql_password -e "exit"
+check_ipv4
 while IFS= read -r line; do
   if [[ "$line" == "APP_URL="* ]]; then
     sed -i 's/^APP_URL=.*/APP_URL="http:\/\/'"${IPV4}"':80\/"/' ".env.example"
