@@ -146,9 +146,9 @@ database_name="panel"
 echo "CREATE USER 'pterodactyl'@'127.0.0.1' IDENTIFIED BY '$mysql_password';" > create_user.sql
 echo "CREATE DATABASE $database_name;" >> create_user.sql
 echo "GRANT ALL PRIVILEGES ON $database_name.* TO 'pterodactyl'@'127.0.0.1' WITH GRANT OPTION;" >> create_user.sql
-mysql -u $mysql_user -p < create_user.sql
+mysql -u $mysql_user -p $mysql_password < create_user.sql
 rm create_user.sql
-mysql -u $mysql_user -p -e "exit"
+mysql -u $mysql_user -p $mysql_password -e "exit"
 cp .env.example .env
 composer install --no-dev --optimize-autoloader
 php artisan key:generate --force
