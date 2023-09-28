@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pterodactyl
-# 2023.09.27
+# 2023.09.28
 
 cd /root >/dev/null 2>&1
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -338,3 +338,6 @@ if [[ "${RELEASE[int]}" != "CentOS" ]]; then
 fi
 nginx -t
 systemctl restart nginx
+if [ -d /var/www/pterodactyl/config/recaptcha.php ]; then
+    sed -i "s/'enabled' => env('RECAPTCHA_ENABLED', true),/'disabled' => env('RECAPTCHA_ENABLED', false),/g" "/var/www/pterodactyl/config/recaptcha.php"
+fi
