@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pterodactyl
-# 2023.09.27
+# 2023.09.28
 
 cd /root >/dev/null 2>&1
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -133,19 +133,46 @@ fi
 if [[ "${RELEASE[int]}" != "Debian" && "${RELEASE[int]}" != "Ubuntu" && "${RELEASE[int]}" != "CentOS" ]]; then
     exit 1
 fi
-if [ ! -f "/usr/local/bin/reboot_pterodactyl.txt" ]; then
-  install_docker_and_compose
-  systemctl enable --now docker
-  grub_config="/etc/default/grub"
-  sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="\(.*\)"/GRUB_CMDLINE_LINUX_DEFAULT="\1 swapaccount=1"/' "$grub_config"
-  sed -i 's/GRUB_CMDLINE_LINUX="\(.*\)"/GRUB_CMDLINE_LINUX="\1 swapaccount=1"/' "$grub_config"
-  update-grub
-  _green "You need to reboot your system to apply the changes."
-  _green "你需要重启服务器以启用修改。"
-  echo "1" > /usr/local/bin/reboot_pterodactyl.txt
+if [ ! -f "/etc/pterodactyl/config.yml" ]; then
+    if [ ! -f "/usr/local/bin/reboot_pterodactyl.txt" ]; then
+      install_docker_and_compose
+      systemctl enable --now docker
+      grub_config="/etc/default/grub"
+      sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="\(.*\)"/GRUB_CMDLINE_LINUX_DEFAULT="\1 swapaccount=1"/' "$grub_config"
+      sed -i 's/GRUB_CMDLINE_LINUX="\(.*\)"/GRUB_CMDLINE_LINUX="\1 swapaccount=1"/' "$grub_config"
+      update-grub
+      _green "You need to reboot your system to apply the changes."
+      _green "你需要重启服务器以启用修改。"
+      echo "1" > /usr/local/bin/reboot_pterodactyl.txt
+    fi
+    if [ ! -d /etc/pterodactyl ]; then
+      mkdir -p /etc/pterodactyl
+    fi
+    curl -L -o /usr/local/bin/wings "https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_$([[ "$(uname -m)" == "x86_64" ]] && echo "amd64" || echo "arm64")"
+    chmod u+x /usr/local/bin/wings
+    cd /root >/dev/null 2>&1
+else
+cat <<EOF > /etc/systemd/system/wings.service
+[Unit]
+Description=Pterodactyl Wings Daemon
+After=docker.service
+Requires=docker.service
+PartOf=docker.service
+
+[Service]
+User=root
+WorkingDirectory=/etc/pterodactyl
+LimitNOFILE=4096
+PIDFile=/var/run/wings/daemon.pid
+ExecStart=/usr/local/bin/wings
+Restart=on-failure
+StartLimitInterval=180
+StartLimitBurst=30
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl enable --now wings
+systemctl daemon-reload
 fi
-if [ ! -d /etc/pterodactyl ]; then
-  mkdir -p /etc/pterodactyl
-fi
-curl -L -o /usr/local/bin/wings "https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_$([[ "$(uname -m)" == "x86_64" ]] && echo "amd64" || echo "arm64")"
-chmod u+x /usr/local/bin/wings
