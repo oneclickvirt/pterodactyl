@@ -20,7 +20,9 @@ if [ -f "/var/www/pterodactyl/database/Seeders/eggs" ]; then
     fi
     cp ./pterodactyl-main/eggs/debian/* /var/www/pterodactyl/database/Seeders/eggs/vps/debian/
     cp ./pterodactyl-main/eggs/ubuntu/* /var/www/pterodactyl/database/Seeders/eggs/vps/ubuntu/
+    cp ./pterodactyl-main/eggs/EggSeeder.php /var/www/pterodactyl/database/Seeders/
+    cp ./pterodactyl-main/eggs/NestSeeder.php /var/www/pterodactyl/database/Seeders/
     rm -rf pterodactyl_eggs* 
     rm -rf pterodactyl-main*
-    rm -rf main.zip
+    rm -rf main.zip*
 fi
