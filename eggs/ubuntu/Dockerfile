@@ -8,7 +8,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 python3-pip gnupg2 \
     && apt-get install -y git \
     && curl -slk https://raw.githubusercontent.com/spiritLHLS/pterodactyl/main/eggs/ssh.sh -o ssh.sh \
-    && bash ssh.sh
+    && bash ssh.sh \
     && rm -rf /var/lib/apt/lists/*
 
 RUN adduser --disabled-password --home / container

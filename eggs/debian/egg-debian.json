@@ -5,12 +5,12 @@
         "update_url": null
     },
     "exported_at": "2023-09-28T13:23:10+11:03",
-    "name": "Ubuntu",
+    "name": "Debian",
     "author": "spiritlhl@yandex.com",
-    "description": "Run an Ubuntu in pterodactyl.",
+    "description": "Run an Debian in pterodactyl.",
     "features": null,
     "docker_images": {
-        "spiritlhl\/pterodactyl:ubuntu": "spiritlhl\/pterodactyl:ubuntu"
+        "spiritlhl\/pterodactyl:debian": "spiritlhl\/pterodactyl:debian"
     },
     "file_denylist": [],
     "startup": ".\/start.sh",
@@ -23,7 +23,7 @@
     "scripts": {
         "installation": {
             "script": "#!\/bin\/bash\r\n\r\ncd \/mnt\/server\/",
-            "container": "spiritlhl\/pterodactyl:ubuntu",
+            "container": "spiritlhl\/pterodactyl:debian",
             "entrypoint": "bash"
         }
     },
