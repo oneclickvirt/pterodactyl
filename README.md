@@ -18,6 +18,12 @@ curl -slk https://raw.githubusercontent.com/spiritLHLS/pterodactyl/main/scripts/
 curl -slk https://raw.githubusercontent.com/spiritLHLS/pterodactyl/main/scripts/install_wings.sh -o install_wings.sh && chmod 777 install_wings.sh && bash install_wings.sh
 ```
 
+## Eggs
+
+```shell
+curl -slk https://raw.githubusercontent.com/spiritLHLS/pterodactyl/main/eggs/rsync_eggs.sh -o rsync_eggs.sh && chmod 777 rsync_eggs.sh && bash rsync_eggs.sh
+```
+
 ## Thanks
 
 https://pterodactyl.io/
