@@ -224,7 +224,7 @@ while IFS= read -r line; do
 done < ".env.example"
 cp .env.example .env
 composer install --no-dev --optimize-autoloader
-curl -slk https://raw.githubusercontent.com/spiritLHLS/pterodactyl/main/eggs/rsync_eggs.sh -o rsync_eggs.sh && chmod 777 rsync_eggs.sh && bash rsync_eggs.sh
+# curl -slk https://raw.githubusercontent.com/spiritLHLS/pterodactyl/main/eggs/rsync_eggs.sh -o rsync_eggs.sh && chmod 777 rsync_eggs.sh && bash rsync_eggs.sh
 php artisan key:generate --force
 php artisan p:environment:setup
 php artisan p:environment:database
