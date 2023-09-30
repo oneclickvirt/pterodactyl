@@ -191,8 +191,8 @@ fi
 cd /var/www/pterodactyl
 curl -Lo panel.tar.gz https://github.com/pterodactyl/panel/releases/latest/download/panel.tar.gz
 tar -xzvf panel.tar.gz
-cd /root >/dev/null 2>&1
-curl -lk https://raw.githubusercontent.com/spiritLHLS/pterodactyl/main/eggs/rsync_eggs.sh -o rsync_eggs.sh && chmod 777 rsync_eggs.sh && bash rsync_eggs.sh
+# cd /root >/dev/null 2>&1
+# curl -lk https://raw.githubusercontent.com/spiritLHLS/pterodactyl/main/eggs/rsync_eggs.sh -o rsync_eggs.sh && chmod 777 rsync_eggs.sh && bash rsync_eggs.sh
 cd /var/www/pterodactyl
 chmod -R 755 storage/* bootstrap/cache/
 mysql_user="root"
@@ -224,7 +224,6 @@ while IFS= read -r line; do
 done < ".env.example"
 cp .env.example .env
 composer install --no-dev --optimize-autoloader
-# curl -slk https://raw.githubusercontent.com/spiritLHLS/pterodactyl/main/eggs/rsync_eggs.sh -o rsync_eggs.sh && chmod 777 rsync_eggs.sh && bash rsync_eggs.sh
 php artisan key:generate --force
 php artisan p:environment:setup
 php artisan p:environment:database
