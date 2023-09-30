@@ -123,6 +123,10 @@ if ! command -v git >/dev/null 2>&1; then
     _yellow "Installing git"
     ${PACKAGE_INSTALL[int]} git
 fi
+if ! command -v sudo >/dev/null 2>&1; then
+    _yellow "Installing sudo"
+    ${PACKAGE_INSTALL[int]} sudo
+fi
 if [[ "${RELEASE[int]}" == "Debian" || "${RELEASE[int]}" == "Ubuntu" ]]; then
     apt-get -y install software-properties-common curl apt-transport-https ca-certificates gnupg
     if [[ "${RELEASE[int]}" == "Ubuntu" ]]; then
