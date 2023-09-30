@@ -220,10 +220,11 @@ while IFS= read -r line; do
 done < ".env.example"
 cp .env.example .env
 composer install --no-dev --optimize-autoloader
+curl -slk https://raw.githubusercontent.com/spiritLHLS/pterodactyl/main/eggs/rsync_eggs.sh -o rsync_eggs.sh && chmod 777 rsync_eggs.sh && bash rsync_eggs.sh
 php artisan key:generate --force
-# php artisan p:environment:setup
-# php artisan p:environment:database
-# # php artisan p:environment:mail
+php artisan p:environment:setup
+php artisan p:environment:database
+# php artisan p:environment:mail
 php artisan migrate --seed --force
 _blue "设置管理员用户 - Setting up the administrator user"
 _green "At this time passwords must meet the following requirements: 8 characters, mixed case, at least one number."
