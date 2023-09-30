@@ -216,12 +216,6 @@ while IFS= read -r line; do
     break
   fi
 done < ".env.example"
-while IFS= read -r line; do
-  if [[ "$line" == "APP_ENVIRONMENT_ONLY="* ]]; then
-    sed -i 's/^APP_ENVIRONMENT_ONLY=.*/APP_ENVIRONMENT_ONLY=false/' ".env.example"
-    break
-  fi
-done < ".env.example"
 cp .env.example .env
 composer install --no-dev --optimize-autoloader
 php artisan key:generate --force
@@ -348,3 +342,9 @@ systemctl restart nginx
 if [ -d /var/www/pterodactyl/config/recaptcha.php ]; then
     sed -i "s/'enabled' => env('RECAPTCHA_ENABLED', true),/'disabled' => env('RECAPTCHA_ENABLED', false),/g" "/var/www/pterodactyl/config/recaptcha.php"
 fi
+while IFS= read -r line; do
+  if [[ "$line" == "APP_ENVIRONMENT_ONLY="* ]]; then
+    sed -i 's/^APP_ENVIRONMENT_ONLY=.*/APP_ENVIRONMENT_ONLY=false/' ".env"
+    break
+  fi
+done < ".env"
