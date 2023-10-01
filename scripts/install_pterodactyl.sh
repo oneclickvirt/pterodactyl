@@ -214,11 +214,6 @@ while IFS= read -r line; do
   fi
 done < ".env.example"
 cp .env.example .env
-cd /root >/dev/null 2>&1
-curl -lk https://raw.githubusercontent.com/spiritLHLS/pterodactyl/main/eggs/rsync_eggs.sh -o rsync_eggs.sh
-chmod 777 rsync_eggs.sh
-./rsync_eggs.sh
-cd /var/www/pterodactyl
 composer install --no-dev --optimize-autoloader
 php artisan key:generate --force
 php artisan p:environment:setup
