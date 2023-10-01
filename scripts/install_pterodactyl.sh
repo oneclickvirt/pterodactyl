@@ -345,3 +345,5 @@ while IFS= read -r line; do
     break
   fi
 done < ".env"
+_green "Login Page URL: http://${IPV4}:80/"
+_green "登录页面URL: http://${IPV4}:80/"
