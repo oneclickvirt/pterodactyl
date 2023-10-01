@@ -16,12 +16,6 @@
 curl -slk https://raw.githubusercontent.com/spiritLHLS/pterodactyl/main/scripts/install_pterodactyl.sh -o install_pterodactyl.sh && chmod 777 install_pterodactyl.sh && bash install_pterodactyl.sh
 ```
 
-## Eggs
-
-```shell
-curl -slk https://raw.githubusercontent.com/spiritLHLS/pterodactyl/main/eggs/rsync_eggs.sh -o rsync_eggs.sh && chmod 777 rsync_eggs.sh && bash rsync_eggs.sh
-```
-
 ## Wings
 
 ```shell
