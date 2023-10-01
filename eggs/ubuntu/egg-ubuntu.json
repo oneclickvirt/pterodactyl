@@ -1,10 +1,10 @@
 {
     "_comment": "DO NOT EDIT: FILE GENERATED AUTOMATICALLY BY PTERODACTYL PANEL - PTERODACTYL.IO",
     "meta": {
-        "version": "PTDL_v2",
+        "version": "v1",
         "update_url": null
     },
-    "exported_at": "2023-09-28T13:23:10+11:03",
+    "exported_at": "2023-10-01T13:23:10+11:03",
     "name": "Ubuntu",
     "author": "spiritlhl@yandex.com",
     "description": "Run an Ubuntu in pterodactyl.",
