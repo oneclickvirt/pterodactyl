@@ -1,0 +1,31 @@
+{
+    "_comment": "DO NOT EDIT: FILE GENERATED AUTOMATICALLY BY PTERODACTYL PANEL - PTERODACTYL.IO",
+    "meta": {
+        "version": "PTDL_v2",
+        "update_url": null
+    },
+    "exported_at": "2023-09-28T13:23:10+11:03",
+    "name": "Debian",
+    "author": "spiritlhl@yandex.com",
+    "description": "Run an Debian in pterodactyl.",
+    "features": null,
+    "docker_images": {
+        "spiritlhl\/pterodactyl:debian": "spiritlhl\/pterodactyl:debian"
+    },
+    "file_denylist": [],
+    "startup": ".\/start.sh",
+    "config": {
+        "files": "{\r\n    \"vps.config\": {\r\n        \"parser\": \"properties\",\r\n        \"find\": {\r\n            \"internalip\": \"0.0.0.0\",\r\n            \"port\": \"{{server.build.default.port}}\"\r\n        }\r\n    }\r\n}",
+        "startup": "{\r\n    \"done\": \")! Welcome \",\r\n    \"userInteraction\": [\r\n        \"Go to eula.txt for more info.\"\r\n    ]\r\n}",
+        "logs": "{}",
+        "stop": "stop"
+    },
+    "scripts": {
+        "installation": {
+            "script": "#!\/bin\/bash\r\n\r\ncd \/mnt\/server\/",
+            "container": "spiritlhl\/pterodactyl:debian",
+            "entrypoint": "bash"
+        }
+    },
+    "variables": []
+}
