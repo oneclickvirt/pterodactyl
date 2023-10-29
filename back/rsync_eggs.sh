@@ -1,12 +1,12 @@
 #!/bin/bash
 # from
-# https://github.com/spiritLHLS/pterodactyl
+# https://github.com/oneclickvirt/pterodactyl
 # 2023.09.30
 
 
 cd /root >/dev/null 2>&1
 # if [ -f "/var/www/pterodactyl/database/Seeders/eggs" ]; then
-wget https://github.com/spiritLHLS/pterodactyl/archive/refs/heads/main.zip
+wget https://github.com/oneclickvirt/pterodactyl/archive/refs/heads/main.zip
 chmod 777 main.zip
 unzip main.zip
 if [ ! -f "/var/www/pterodactyl/database/Seeders/eggs/vps" ]; then

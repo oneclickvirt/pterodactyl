@@ -1,6 +1,6 @@
 #!/bin/bash
 # from
-# https://github.com/spiritLHLS/pterodactyl
+# https://github.com/oneclickvirt/pterodactyl
 # 2023.09.28
 
 cd /root >/dev/null 2>&1
