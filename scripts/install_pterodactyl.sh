@@ -229,6 +229,7 @@ sed -i 's/^MAIL_FROM_NAME=.*/MAIL_FROM_NAME="Pterodactyl Panel"/' .env.example
 cp .env.example .env
 php artisan config:clear
 php artisan cache:clear
+php artisan config:cache
 COMPOSER_ALLOW_SUPERUSER=1  composer install --no-dev --optimize-autoloader --no-interaction
 php artisan key:generate --force --no-interaction
 php artisan p:environment:setup --no-interaction
