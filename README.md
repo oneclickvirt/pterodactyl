@@ -12,8 +12,6 @@
 | AlmaLinux   | 8, 9                       | 未支持       |
 | Rocky Linux | 8, 9                       | 未支持       |
 
-> ⚠️ 注意：Pterodactyl 面板（Panel）需要运行在支持 PHP 8.1+ 和 MySQL 5.7+/MariaDB 10.2+ 的环境中，守护进程 Wings 需要 Docker 环境支持。
-
 ## 更新
 
 2025.04.13
@@ -23,7 +21,11 @@
 ## Panel
 
 ```shell
-curl -slk https://raw.githubusercontent.com/oneclickvirt/pterodactyl/main/scripts/install_pterodactyl.sh -o install_pterodactyl.sh && chmod 777 install_pterodactyl.sh && bash install_pterodactyl.sh
+curl -slk https://raw.githubusercontent.com/oneclickvirt/pterodactyl/main/scripts/install_pterodactyl.sh -o install_pterodactyl.sh && chmod 777 install_pterodactyl.sh
+```
+
+```shell
+bash install_pterodactyl.sh
 ```
 
 ## Wings
