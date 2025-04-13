@@ -16,7 +16,7 @@
 
 2025.04.13
 
-- 测试修复panel安装
+- 测试修复panel和wings的安装
 
 ## Panel
 
