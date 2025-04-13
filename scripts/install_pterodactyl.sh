@@ -224,7 +224,7 @@ sed -i 's/^MAIL_FROM_NAME=.*/MAIL_FROM_NAME="Pterodactyl Panel"/' .env.example
 cp .env.example .env
 php artisan config:clear
 php artisan cache:clear
-composer install --no-dev --optimize-autoloader
+COMPOSER_ALLOW_SUPERUSER=1  composer install --no-dev --optimize-autoloader --no-interaction
 php artisan key:generate --force
 php artisan p:environment:setup
 php artisan p:environment:database
@@ -234,7 +234,6 @@ PASSWORD=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 12)
 php artisan p:user:make \
   --email=admin@localhost \
   --username=oneclickvirt \
-  --name="Admin" \
   --password="$PASSWORD" \
   --admin=1
 if [[ "${RELEASE[int]}" == "Debian" || "${RELEASE[int]}" == "Ubuntu" ]]; then
