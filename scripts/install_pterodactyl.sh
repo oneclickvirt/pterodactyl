@@ -153,13 +153,13 @@ if [[ "${RELEASE[int]}" == "Debian" || "${RELEASE[int]}" == "Ubuntu" ]]; then
         apt-add-repository universe
     fi
     check_update
-    apt-get -y install php8.1 php8.1-{common,cli,gd,mysql,mbstring,bcmath,xml,fpm,curl,zip} nginx redis-server
+    apt-get -y install php8.3 php8.3-{common,cli,gd,mysql,mbstring,bcmath,xml,fpm,curl,zip} nginx redis-server
 elif [[ "${RELEASE[int]}" == "CentOS" ]]; then
     yum -y install epel-release curl
     yum -y install https://rpms.remirepo.net/enterprise/remi-release-8.rpm
     yum -y install yum-utils
     yum-config-manager --disable remi-php54
-    yum-config-manager --enable remi-php81
+    yum-config-manager --enable remi-php82
     if [ ! -d /etc/pki/rpm-gpg/redis-archive-keyring.gpg ]; then
         curl -fsSL https://packages.redis.io/gpg | gpg --dearmor -o /etc/pki/rpm-gpg/redis-archive-keyring.gpg
     fi
