@@ -230,10 +230,13 @@ php artisan p:environment:setup
 php artisan p:environment:database
 # php artisan p:environment:mail
 php artisan migrate --seed --force
-_blue "设置管理员用户(请选择Yes) - Setting up the administrator user(Please select Yes)"
-_green "At this time passwords must meet the following requirements: 8 characters, mixed case, at least one number."
-_green "密码必须满足以下要求：8个字符，大小写混合，至少1个数字"
-php artisan p:user:make
+PASSWORD=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 12)
+php artisan p:user:make \
+  --email=admin@localhost \
+  --username=oneclickvirt \
+  --name="Admin" \
+  --password="$PASSWORD" \
+  --admin=1
 if [[ "${RELEASE[int]}" == "Debian" || "${RELEASE[int]}" == "Ubuntu" ]]; then
     chown -R www-data:www-data /var/www/pterodactyl/*
 elif [[ "${RELEASE[int]}" == "CentOS" ]]; then
@@ -357,4 +360,6 @@ while IFS= read -r line; do
 done < ".env"
 _green "Login Page URL: http://${IPV4}:80/"
 _green "登录页面URL: http://${IPV4}:80/"
+_green "用户名(UserName): oneclickvirt"
+_green "密码(Password): $PASSWORD"
 echo ""
