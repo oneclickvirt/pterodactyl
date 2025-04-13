@@ -40,19 +40,16 @@ init_system_vars() {
     PACKAGE_REMOVE=("apt-get -y remove" "apt-get -y remove" "yum -y remove" "yum -y remove" "yum -y remove" "pacman -Rsc --noconfirm")
     PACKAGE_UNINSTALL=("apt-get -y autoremove" "apt-get -y autoremove" "yum -y autoremove" "yum -y autoremove" "yum -y autoremove" "")
     CMD=("$(grep -i pretty_name /etc/os-release 2>/dev/null | cut -d \" -f2)" "$(hostnamectl 2>/dev/null | grep -i system | cut -d : -f2)" "$(lsb_release -sd 2>/dev/null)" "$(grep -i description /etc/lsb-release 2>/dev/null | cut -d \" -f2)" "$(grep . /etc/redhat-release 2>/dev/null)" "$(grep . /etc/issue 2>/dev/null | cut -d \\ -f1 | sed '/^[ ]*$/d')" "$(grep -i pretty_name /etc/os-release 2>/dev/null | cut -d \" -f2)")
-
     SYS="${CMD[0]}"
     [[ -n $SYS ]] || exit 1
-
     for ((int = 0; int < ${#REGEX[@]}; int++)); do
         if [[ $(echo "$SYS" | tr '[:upper:]' '[:lower:]') =~ ${REGEX[int]} ]]; then
             SYSTEM="${RELEASE[int]}"
             [[ -n $SYSTEM ]] && break
         fi
     done
-
     # 设置默认密码
-    mysql_password="oneclick123"
+    mysql_password=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 10)
 }
 
 ###########################################
@@ -613,11 +610,22 @@ main() {
     configure_nginx
     # 禁用reCAPTCHA和2FA要求
     disable_recaptcha_and_2fa
-    # 显示安装信息
-    _green "安装完成！"
-    _green "登录页面(URL): http://${IPV4}:80/"
-    _green "用户名(UserName): oneclickvirt"
-    _green "密码(Password): $PASSWORD"
+    USERNAME="oneclickvirt"
+    LOGIN_URL="http://${IPV4}:80/"
+    AUTO_USER_FILE="/var/www/pterodactyl/auto_users.txt"
+    _green "安装完成！Installation Complete!"
+    _green "登录页面 (Login URL): $LOGIN_URL"
+    _green "用户名 (Username): $USERNAME"
+    _green "密码 (Password): $PASSWORD"
+    mkdir -p /var/www/pterodactyl
+    cat > "$AUTO_USER_FILE" <<EOF
+    登录页面 (Login URL): $LOGIN_URL
+    用户名 (Username): $USERNAME
+    密码 (Password): $PASSWORD
+    EOF
+    _green "用户信息已保存到 (User info saved to): $AUTO_USER_FILE"
+    _green "您可以使用以下命令查看 (You can check it with):"
+    echo "cat $AUTO_USER_FILE"
     echo ""
 }
 
