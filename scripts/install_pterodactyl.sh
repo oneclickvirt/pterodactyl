@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pterodactyl
-# 2023.10.01
+# 2025.04.13
 
 cd /root >/dev/null 2>&1
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -213,6 +213,14 @@ while IFS= read -r line; do
     break
   fi
 done < ".env.example"
+sed -i 's/^MAIL_MAILER=.*/MAIL_MAILER=log/' .env.example
+sed -i 's/^MAIL_HOST=.*/MAIL_HOST=127.0.0.1/' .env.example
+sed -i 's/^MAIL_PORT=.*/MAIL_PORT=25/' .env.example
+sed -i 's/^MAIL_USERNAME=.*/MAIL_USERNAME=null/' .env.example
+sed -i 's/^MAIL_PASSWORD=.*/MAIL_PASSWORD=null/' .env.example
+sed -i 's/^MAIL_ENCRYPTION=.*/MAIL_ENCRYPTION=null/' .env.example
+sed -i 's/^MAIL_FROM_ADDRESS=.*/MAIL_FROM_ADDRESS=no-reply@localhost/' .env.example
+sed -i 's/^MAIL_FROM_NAME=.*/MAIL_FROM_NAME="Pterodactyl Panel"/' .env.example
 cp .env.example .env
 composer install --no-dev --optimize-autoloader
 php artisan key:generate --force
