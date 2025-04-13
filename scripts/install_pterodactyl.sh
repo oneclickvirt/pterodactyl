@@ -149,30 +149,24 @@ check_system_compatibility() {
 # 安装基本依赖
 install_basic_dependencies() {
     _yellow "安装基本依赖"
-
     # 安装基本工具
     check_update
-
     if ! command -v curl >/dev/null 2>&1; then
         _yellow "安装 curl"
         ${PACKAGE_INSTALL[int]} curl
     fi
-
     if ! command -v tar >/dev/null 2>&1; then
         _yellow "安装 tar"
         ${PACKAGE_INSTALL[int]} tar
     fi
-
     if ! command -v unzip >/dev/null 2>&1; then
         _yellow "安装 unzip"
         ${PACKAGE_INSTALL[int]} unzip
     fi
-
     if ! command -v git >/dev/null 2>&1; then
         _yellow "安装 git"
         ${PACKAGE_INSTALL[int]} git
     fi
-
     if ! command -v sudo >/dev/null 2>&1; then
         _yellow "安装 sudo"
         ${PACKAGE_INSTALL[int]} sudo
@@ -182,13 +176,11 @@ install_basic_dependencies() {
 # 根据系统安装软件包
 install_system_packages() {
     _yellow "为 ${RELEASE[int]} 安装必要软件包"
-
     if [[ "${RELEASE[int]}" == "Debian" || "${RELEASE[int]}" == "Ubuntu" ]]; then
         install_debian_ubuntu_packages
     elif [[ "${RELEASE[int]}" == "CentOS" ]]; then
         install_centos_packages
     fi
-
     # 安装Composer
     curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 }
@@ -338,7 +330,8 @@ install_pterodactyl() {
     php artisan cache:clear
     php artisan config:cache
     # 安装依赖
-    COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --optimize-autoloader --no-interaction
+    export COMPOSER_ALLOW_SUPERUSER=1
+    composer install --no-dev --optimize-autoloader --no-interaction
     # 生成密钥和设置环境
     php artisan key:generate --force --no-interaction
     php artisan p:environment:setup \
