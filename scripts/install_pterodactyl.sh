@@ -619,10 +619,10 @@ main() {
     _green "密码 (Password): $PASSWORD"
     mkdir -p /var/www/pterodactyl
     cat > "$AUTO_USER_FILE" <<EOF
-    登录页面 (Login URL): $LOGIN_URL
-    用户名 (Username): $USERNAME
-    密码 (Password): $PASSWORD
-    EOF
+登录页面 (Login URL): $LOGIN_URL
+用户名 (Username): $USERNAME
+密码 (Password): $PASSWORD
+EOF
     _green "用户信息已保存到 (User info saved to): $AUTO_USER_FILE"
     _green "您可以使用以下命令查看 (You can check it with):"
     echo "cat $AUTO_USER_FILE"
