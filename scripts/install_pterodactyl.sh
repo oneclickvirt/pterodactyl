@@ -572,6 +572,20 @@ server {
     systemctl restart nginx
 }
 
+# 禁用reCAPTCHA和2FA要求
+disable_recaptcha_and_2fa() {
+    _yellow "禁用reCAPTCHA和2FA要求"
+    # 禁用reCAPTCHA (通过数据库方式)
+    mysql -u root -p$mysql_password -e "UPDATE panel.settings SET value = 'false' WHERE \`key\` = 'settings::recaptcha:enabled';"
+    # 禁用2FA要求
+    mysql -u root -p$mysql_password -e "UPDATE panel.settings SET value = 0 WHERE \`key\` = 'settings::pterodactyl:auth:2fa_required';"
+    # 备用方式: 尝试通过配置文件禁用reCAPTCHA (以防数据库更新失败)
+    if [ -f /var/www/pterodactyl/config/recaptcha.php ]; then
+        sed -i "s/'enabled' => env('RECAPTCHA_ENABLED', true),/'enabled' => env('RECAPTCHA_ENABLED', false),/g" "/var/www/pterodactyl/config/recaptcha.php"
+    fi
+    _green "已禁用reCAPTCHA和2FA要求"
+}
+
 ###########################################
 # 主函数
 ###########################################
@@ -597,6 +611,8 @@ main() {
     create_queue_service
     # Nginx配置
     configure_nginx
+    # 禁用reCAPTCHA和2FA要求
+    disable_recaptcha_and_2fa
     # 显示安装信息
     _green "安装完成！"
     _green "登录页面(URL): http://${IPV4}:80/"
