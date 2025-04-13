@@ -1,6 +1,7 @@
 #!/bin/bash
 # https://github.com/oneclickvirt/pterodactyl
 # 2025.04.13
+# Pterodactyl 面板（Panel）需要运行在支持 PHP 8.1+ 和 MySQL 5.7+/MariaDB 10.2+ 的环境中
 
 ###########################################
 # 初始化和环境变量设置
