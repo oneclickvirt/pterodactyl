@@ -225,11 +225,11 @@ cp .env.example .env
 php artisan config:clear
 php artisan cache:clear
 COMPOSER_ALLOW_SUPERUSER=1  composer install --no-dev --optimize-autoloader --no-interaction
-php artisan key:generate --force
-php artisan p:environment:setup
-php artisan p:environment:database
-# php artisan p:environment:mail
-php artisan migrate --seed --force
+php artisan key:generate --force --no-interaction
+php artisan p:environment:setup --no-interaction
+php artisan p:environment:database --no-interaction
+# php artisan p:environment:mail --no-interaction
+php artisan migrate --seed --force --no-interaction
 PASSWORD=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 12)
 php artisan p:user:make \
   --email=admin@localhost \
