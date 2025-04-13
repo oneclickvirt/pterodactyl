@@ -196,11 +196,16 @@ mysql_user="root"
 database_name="panel"
 echo "CREATE USER 'pterodactyl'@'127.0.0.1' IDENTIFIED BY '$mysql_password';" > create_user.sql
 echo "CREATE DATABASE $database_name;" >> create_user.sql
-echo "GRANT ALL PRIVILEGES ON $database_name.* TO 'pterodactyl'@'127.0.0.1' WITH GRANT OPTION;" >> create_user.sql
+echo "GRANT ALL PRIVILEGES ON $database_name.* TO 'pterodactyl'@'localhost' IDENTIFIED BY '$mysql_password' WITH GRANT OPTION;" >> create_user.sql
 mysql -u $mysql_user -p$mysql_password < create_user.sql
 rm create_user.sql
 mysql -u $mysql_user -p$mysql_password -e "exit"
 check_ipv4
+if grep -q "^DB_PASSWORD=" .env.example; then
+  sed -i 's/^DB_PASSWORD=.*/DB_PASSWORD='"${mysql_password}"'/' ".env.example"
+else
+  echo "DB_PASSWORD=${mysql_password}" >> .env.example
+fi
 while IFS= read -r line; do
   if [[ "$line" == "APP_URL="* ]]; then
     sed -i 's/^APP_URL=.*/APP_URL="http:\/\/'"${IPV4}"':80\/"/' ".env.example"
@@ -235,6 +240,8 @@ php artisan p:user:make \
   --email=admin@localhost \
   --username=oneclickvirt \
   --password="$PASSWORD" \
+  --first-name=Admin \
+  --last-name=User \
   --admin=1
 if [[ "${RELEASE[int]}" == "Debian" || "${RELEASE[int]}" == "Ubuntu" ]]; then
     chown -R www-data:www-data /var/www/pterodactyl/*
