@@ -403,14 +403,16 @@ setup_cron_job() {
 # 创建队列工作服务
 create_queue_service() {
     _yellow "创建队列工作服务"
+    # 定义Redis服务名称变量
     if [[ "${RELEASE[int]}" == "Debian" || "${RELEASE[int]}" == "Ubuntu" ]]; then
+        REDIS_SERVICE="redis-server"
         cat <<EOL >/etc/systemd/system/pteroq.service
 # Pterodactyl Queue Worker File
 # ----------------------------------
 
 [Unit]
 Description=Pterodactyl Queue Worker
-After=redis-server.service
+After=${REDIS_SERVICE}.service
 
 [Service]
 User=www-data
@@ -425,17 +427,18 @@ RestartSec=5s
 WantedBy=multi-user.target
 EOL
     elif [[ "${RELEASE[int]}" == "CentOS" ]]; then
+        REDIS_SERVICE="redis"
         cat <<EOL >/etc/systemd/system/pteroq.service
 # Pterodactyl Queue Worker File
 # ----------------------------------
 
 [Unit]
 Description=Pterodactyl Queue Worker
-After=redis.service
+After=${REDIS_SERVICE}.service
 
 [Service]
-User=www-data
-Group=www-data
+User=nginx
+Group=nginx
 Restart=always
 ExecStart=/usr/bin/php /var/www/pterodactyl/artisan queue:work --queue=high,standard,low --sleep=3 --tries=3
 StartLimitInterval=180
@@ -446,13 +449,19 @@ RestartSec=5s
 WantedBy=multi-user.target
 EOL
     fi
-    # 启用服务
-    systemctl enable --now redis.service
+    # 启用服务 - 使用正确的Redis服务名
+    systemctl enable --now ${REDIS_SERVICE}.service
     systemctl enable --now pteroq.service
     systemctl enable nginx
     systemctl enable mariadb
-    systemctl enable php8.1-fpm
-    systemctl enable redis-server
+    # 确定PHP-FPM版本
+    if command -v php8.3 >/dev/null 2>&1; then
+        systemctl enable php8.3-fpm
+    elif command -v php8.1 >/dev/null 2>&1; then
+        systemctl enable php8.1-fpm
+    elif command -v php-fpm >/dev/null 2>&1; then
+        systemctl enable php-fpm
+    fi
 }
 
 ###########################################
