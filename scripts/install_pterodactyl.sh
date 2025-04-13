@@ -471,39 +471,80 @@ EOL
 # 配置Nginx
 configure_nginx() {
     _yellow "配置Nginx服务器"
-    rm /etc/nginx/sites-enabled/default
+    # 删除默认配置
+    if [ -f /etc/nginx/sites-enabled/default ]; then
+        rm /etc/nginx/sites-enabled/default
+    fi
+    # 确定配置文件路径
     if [[ "${RELEASE[int]}" == "Debian" || "${RELEASE[int]}" == "Ubuntu" ]]; then
         nginx_config_path="/etc/nginx/sites-available/pterodactyl.conf"
     elif [[ "${RELEASE[int]}" == "CentOS" ]]; then
         nginx_config_path="/etc/nginx/conf.d/pterodactyl.conf"
     fi
+    # 自动检测PHP-FPM版本和socket路径
+    php_fpm_sock=""
+    php_version=""
+    # 检查可能的PHP版本，优先使用较新版本
+    for version in "8.3" "8.2" "8.1" "8.0" "7.4"; do
+        if command -v php$version >/dev/null 2>&1; then
+            php_version=$version
+            break
+        fi
+    done
+    # 如果没找到特定版本，检查是否有通用的php命令
+    if [ -z "$php_version" ] && command -v php >/dev/null 2>&1; then
+        php_version=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')
+    fi
+    _yellow "检测到PHP版本: $php_version"
+    # 检查PHP-FPM socket路径
+    if [[ "${RELEASE[int]}" == "Debian" || "${RELEASE[int]}" == "Ubuntu" ]]; then
+        if [ -S "/run/php/php${php_version}-fpm.sock" ]; then
+            php_fpm_sock="/run/php/php${php_version}-fpm.sock"
+        fi
+    elif [[ "${RELEASE[int]}" == "CentOS" ]]; then
+        if [ -S "/var/run/php-fpm/php-fpm.sock" ]; then
+            php_fpm_sock="/var/run/php-fpm/php-fpm.sock"
+        elif [ -S "/run/php-fpm/www.sock" ]; then
+            php_fpm_sock="/run/php-fpm/www.sock"
+        fi
+    fi
+    # 如果仍然没有找到socket，尝试搜索系统中的PHP-FPM socket
+    if [ -z "$php_fpm_sock" ]; then
+        potential_sock=$(find /run -name "php*-fpm.sock" | head -n 1)
+        if [ -n "$potential_sock" ]; then
+            php_fpm_sock=$potential_sock
+        else
+            # 如果仍找不到，使用默认路径并发出警告
+            _yellow "警告: 无法找到PHP-FPM socket，使用默认路径。可能需要手动调整配置。"
+            if [[ "${RELEASE[int]}" == "Debian" || "${RELEASE[int]}" == "Ubuntu" ]]; then
+                php_fpm_sock="/run/php/php${php_version}-fpm.sock"
+            else
+                php_fpm_sock="/var/run/php-fpm/php-fpm.sock"
+            fi
+        fi
+    fi
+    _yellow "使用PHP-FPM socket: $php_fpm_sock"
     # 创建Nginx配置
     config="
 server {
     listen 80;
     server_name $IPV4;
-
     root /var/www/pterodactyl/public;
     index index.html index.htm index.php;
     charset utf-8;
-
     location / {
         try_files \$uri \$uri/ /index.php?\$query_string;
     }
-
     location = /favicon.ico { access_log off; log_not_found off; }
     location = /robots.txt  { access_log off; log_not_found off; }
-
     access_log off;
     error_log  /var/log/nginx/pterodactyl.app-error.log error;
-
     client_max_body_size 100m;
     client_body_timeout 120s;
     sendfile off;
-
     location ~ \.php$ {
         fastcgi_split_path_info ^(.+\.php)(/.+)$;
-        fastcgi_pass unix:/run/php/php8.1-fpm.sock;
+        fastcgi_pass unix:${php_fpm_sock};
         fastcgi_index index.php;
         include fastcgi_params;
         fastcgi_param PHP_VALUE \"upload_max_filesize = 100M \n post_max_size=100M\";
@@ -516,7 +557,6 @@ server {
         fastcgi_send_timeout 300;
         fastcgi_read_timeout 300;
     }
-
     location ~ /\.ht {
         deny all;
     }
