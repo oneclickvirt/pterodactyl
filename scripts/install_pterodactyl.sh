@@ -222,6 +222,8 @@ sed -i 's/^MAIL_ENCRYPTION=.*/MAIL_ENCRYPTION=null/' .env.example
 sed -i 's/^MAIL_FROM_ADDRESS=.*/MAIL_FROM_ADDRESS=no-reply@localhost/' .env.example
 sed -i 's/^MAIL_FROM_NAME=.*/MAIL_FROM_NAME="Pterodactyl Panel"/' .env.example
 cp .env.example .env
+php artisan config:clear
+php artisan cache:clear
 composer install --no-dev --optimize-autoloader
 php artisan key:generate --force
 php artisan p:environment:setup
