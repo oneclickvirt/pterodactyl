@@ -96,8 +96,8 @@ check_update() {
                 cat >/etc/apt/sources.list <<EOF
 deb http://archive.debian.org/debian/ $codename main contrib non-free
 deb-src http://archive.debian.org/debian/ $codename main contrib non-free
-deb http://archive.debian.org/debian-security/ $codename/updates main contrib non-free
-deb-src http://archive.debian.org/debian-security/ $codename/updates main contrib non-free
+#deb http://archive.debian.org/debian-security/ $codename/updates main contrib non-free
+#deb-src http://archive.debian.org/debian-security/ $codename/updates main contrib non-free
 EOF
                 mkdir -p /etc/apt/apt.conf.d
                 echo 'Acquire::Check-Valid-Until "false";' >/etc/apt/apt.conf.d/99ignore-release-date
@@ -105,7 +105,7 @@ EOF
                 cat >/etc/apt/sources.list <<EOF
 deb http://old-releases.ubuntu.com/ubuntu/ $codename main restricted universe multiverse
 deb http://old-releases.ubuntu.com/ubuntu/ $codename-updates main restricted universe multiverse
-deb http://old-releases.ubuntu.com/ubuntu/ $codename-security main restricted universe multiverse
+#deb http://old-releases.ubuntu.com/ubuntu/ $codename-security main restricted universe multiverse
 EOF
             fi
             _green "已替换为归档源：$distro $codename"
