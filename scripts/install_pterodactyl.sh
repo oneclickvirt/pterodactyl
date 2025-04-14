@@ -1,6 +1,6 @@
 #!/bin/bash
 # https://github.com/oneclickvirt/pterodactyl
-# 2025.04.13
+# 2025.04.14
 # Pterodactyl 面板（Panel）需要运行在支持 PHP 8.1+ 和 MySQL 5.7+/MariaDB 10.2+ 的环境中
 
 ###########################################
@@ -89,28 +89,30 @@ check_update() {
                     ;;
             esac
         fi
-        # 如为归档版本，则替换为归档源，并设置 OVERRIDE_CODENAME
+        # 如为归档版本，则替换为归档源
         if [[ "$is_archive" == true ]]; then
-            _yellow "检测到归档系统：$distro $codename，正在替换为归档源"
-            if [[ "$distro" == "debian" ]]; then
-                cat >/etc/apt/sources.list <<EOF
-deb http://archive.debian.org/debian/ $codename main contrib non-free
-deb-src http://archive.debian.org/debian/ $codename main contrib non-free
-#deb http://archive.debian.org/debian-security/ $codename/updates main contrib non-free
-#deb-src http://archive.debian.org/debian-security/ $codename/updates main contrib non-free
-EOF
-                mkdir -p /etc/apt/apt.conf.d
-                echo 'Acquire::Check-Valid-Until "false";' >/etc/apt/apt.conf.d/99ignore-release-date
-                export OVERRIDE_CODENAME="bullseye"
-            elif [[ "$distro" == "ubuntu" ]]; then
-                cat >/etc/apt/sources.list <<EOF
-deb http://old-releases.ubuntu.com/ubuntu/ $codename main restricted universe multiverse
-deb http://old-releases.ubuntu.com/ubuntu/ $codename-updates main restricted universe multiverse
-#deb http://old-releases.ubuntu.com/ubuntu/ $codename-security main restricted universe multiverse
-EOF
-                export OVERRIDE_CODENAME="jammy"
-            fi
-            _green "已替换为归档源：$distro $codename，使用新仓库 codename：$OVERRIDE_CODENAME"
+            _yellow "检测到归档系统：$distro $codename，请升级系统，正在退出程序"
+            exit 1
+#             _yellow "检测到归档系统：$distro $codename，正在替换为归档源"
+#             if [[ "$distro" == "debian" ]]; then
+#                 cat >/etc/apt/sources.list <<EOF
+# deb http://archive.debian.org/debian/ $codename main contrib non-free
+# deb-src http://archive.debian.org/debian/ $codename main contrib non-free
+# #deb http://archive.debian.org/debian-security/ $codename/updates main contrib non-free
+# #deb-src http://archive.debian.org/debian-security/ $codename/updates main contrib non-free
+# EOF
+#                 mkdir -p /etc/apt/apt.conf.d
+#                 echo 'Acquire::Check-Valid-Until "false";' >/etc/apt/apt.conf.d/99ignore-release-date
+#                 export OVERRIDE_CODENAME="bullseye"
+#             elif [[ "$distro" == "ubuntu" ]]; then
+#                 cat >/etc/apt/sources.list <<EOF
+# deb http://old-releases.ubuntu.com/ubuntu/ $codename main restricted universe multiverse
+# deb http://old-releases.ubuntu.com/ubuntu/ $codename-updates main restricted universe multiverse
+# #deb http://old-releases.ubuntu.com/ubuntu/ $codename-security main restricted universe multiverse
+# EOF
+#                 export OVERRIDE_CODENAME="jammy"
+#             fi
+#             _green "已替换为归档源：$distro $codename，使用新仓库 codename：$OVERRIDE_CODENAME"
         fi
         # 更新包列表
         temp_file_apt_fix=$(mktemp)
@@ -234,7 +236,8 @@ install_system_packages() {
 install_debian_ubuntu_packages() {
     apt-get -y install software-properties-common curl apt-transport-https ca-certificates gnupg
     # 确定使用的 codename
-    CODENAME=${OVERRIDE_CODENAME:-$(lsb_release -sc)}
+    # CODENAME=${OVERRIDE_CODENAME:-$(lsb_release -sc)}
+    CODENAME=$(lsb_release -sc)
     # 添加PHP仓库
     if [[ "${RELEASE[int]}" == "Ubuntu" ]]; then
         LC_ALL=C.UTF-8 add-apt-repository -y ppa:ondrej/php
