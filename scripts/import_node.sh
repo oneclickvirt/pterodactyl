@@ -124,14 +124,13 @@ create_node() {
     return 0
 }
 
-# 模拟登录面板
 login_panel() {
     local panel_url=$1
     local admin_email=$2
     local admin_password=$3
     echo "正在登录Pterodactyl面板: $panel_url"
     rm -f "$COOKIES_FILE"
-    local csrf_response=$(curl -s -c "$COOKIES_FILE" "${panel_url}/auth/login")
+    curl -s -c "$COOKIES_FILE" "${panel_url}/sanctum/csrf-cookie"
     local initial_csrf=$(grep "XSRF-TOKEN" "$COOKIES_FILE" | awk '{print $7}' | url_decode)
     if [ -z "$initial_csrf" ]; then
         echo "错误：无法获取初始CSRF令牌"
@@ -139,13 +138,15 @@ login_panel() {
     fi
     echo "获取到初始CSRF令牌: $initial_csrf"
     local LOGIN_RESPONSE=$(curl -s -c "$COOKIES_FILE" -b "$COOKIES_FILE" -X POST "$panel_url/auth/login" \
-        -H "X-CSRF-TOKEN: $initial_csrf" \
+        -H "X-XSRF-TOKEN: $initial_csrf" \
         -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0' \
         -H 'Accept: application/json' \
         -H 'Content-Type: application/json' \
         -H 'X-Requested-With: XMLHttpRequest' \
-        --data-raw "{\"user\":\"$admin_email\",\"password\":\"$admin_password\"}")
-    if echo "$LOGIN_RESPONSE" | grep -q "错误" || echo "$LOGIN_RESPONSE" | grep -q "token_mismatch" || echo "$LOGIN_RESPONSE" | grep -q "These credentials do not match our records"; then
+        -H "Referer: ${panel_url}/auth/login" \
+        --data-raw "{\"user\":\"$admin_email\",\"password\":\"$admin_password\",\"g-recaptcha-response\":\"\"}")
+    echo "登录响应: $LOGIN_RESPONSE"
+    if echo "$LOGIN_RESPONSE" | grep -q "错误" || echo "$LOGIN_RESPONSE" | grep -q "token_mismatch" || ! echo "$LOGIN_RESPONSE" | grep -q "\"complete\":true"; then
         echo "错误：面板登录失败，请检查用户名和密码是否正确！"
         return 1
     fi
