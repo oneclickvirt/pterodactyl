@@ -258,7 +258,7 @@ install_debian_ubuntu_packages() {
         apt-add-repository universe
     fi
     # 更新和安装必要包
-    check_update
+    apt update
     apt-get -y install php8.3 php8.3-{common,cli,gd,mysql,mbstring,bcmath,xml,fpm,curl,zip} nginx redis-server
 }
 
@@ -287,7 +287,7 @@ install_centos_packages() {
         yum -y install mariadb-server
     fi
     # 更新和安装必要包
-    check_update
+    yum update
     yum -y install php php-{common,cli,gd,mysql,mbstring,bcmath,xml,fpm,curl,zip} nginx redis
     # 启动服务
     systemctl start mariadb
