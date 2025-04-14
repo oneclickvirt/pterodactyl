@@ -584,6 +584,12 @@ disable_recaptcha_and_2fa() {
     _green "已禁用reCAPTCHA和2FA要求"
 }
 
+# 自动创建默认配置
+setup_auto_config() {
+    cd /var/www/pterodactyl
+    php artisan p:location:make --short=Servers --long="Auto Include Servers, do not delete me."
+}
+
 ###########################################
 # 主函数
 ###########################################
@@ -611,6 +617,8 @@ main() {
     configure_nginx
     # 禁用reCAPTCHA和2FA要求
     disable_recaptcha_and_2fa
+    # 自动创建默认配置
+    setup_auto_config
     USERNAME="oneclickvirt"
     LOGIN_URL="http://${IPV4}:80/"
     AUTO_USER_FILE="/var/www/pterodactyl/auto_users.txt"
@@ -619,9 +627,9 @@ main() {
     _green "用户名 (Username): $USERNAME"
     _green "密码 (Password): $PASSWORD"
     mkdir -p /var/www/pterodactyl
-    echo "登录页面 (Login URL): $LOGIN_URL" > "$AUTO_USER_FILE"
-    echo "用户名 (Username): $USERNAME" >> "$AUTO_USER_FILE"
-    echo "密码 (Password): $PASSWORD" >> "$AUTO_USER_FILE"
+    echo "登录页面 (Login URL): $LOGIN_URL" >"$AUTO_USER_FILE"
+    echo "用户名 (Username): $USERNAME" >>"$AUTO_USER_FILE"
+    echo "密码 (Password): $PASSWORD" >>"$AUTO_USER_FILE"
     _green "用户信息已保存到 (User info saved to): $AUTO_USER_FILE"
     _green "您可以使用以下命令查看 (You can check it with):"
     echo "cat $AUTO_USER_FILE"

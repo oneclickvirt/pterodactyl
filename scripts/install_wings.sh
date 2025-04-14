@@ -57,7 +57,7 @@ detect_system() {
             [[ -n $SYSTEM ]] && break
         fi
     done
-    
+
     # 检查是否是支持的系统
     if [[ "${RELEASE[int]}" != "Debian" && "${RELEASE[int]}" != "Ubuntu" && "${RELEASE[int]}" != "CentOS" ]]; then
         _red "不支持的操作系统: ${RELEASE[int]}"
@@ -69,7 +69,7 @@ create_directories() {
     if [ ! -d /usr/local/bin ]; then
         mkdir -p /usr/local/bin
     fi
-    
+
     if [ ! -d /etc/pterodactyl ]; then
         mkdir -p /etc/pterodactyl
     fi
@@ -145,32 +145,49 @@ check_ipv4() {
 #######################
 # 5. Docker安装模块
 #######################
+check_china() {
+    _yellow "IP area being detected ......"
+    if [[ -z "${CN}" ]]; then
+        if [[ $(curl -m 6 -s https://ipapi.co/json | grep 'China') != "" ]]; then
+            _yellow "根据ipapi.co提供的信息，当前IP可能在中国"
+            read -e -r -p "是否选用中国镜像完成相关组件安装? ([y]/n) " input
+            case $input in
+            [yY][eE][sS] | [yY])
+                echo "使用中国镜像"
+                CN=true
+                ;;
+            [nN][oO] | [nN])
+                echo "不使用中国镜像"
+                ;;
+            *)
+                echo "使用中国镜像"
+                CN=true
+                ;;
+            esac
+        fi
+    fi
+}
+
 install_docker_and_compose() {
-    _green "这可能需要2~3分钟，请耐心等待..."
+    _green "This may stay for 2~3 minutes, please be patient..."
+    _green "此处可能会停留2~3分钟，请耐心等待。。。"
     sleep 1
-    
-    # 安装Docker
     if ! command -v docker >/dev/null 2>&1; then
-        _yellow "正在安装Docker"
+        _yellow "Installing docker"
         if [[ -z "${CN}" || "${CN}" != true ]]; then
             curl -sSL https://get.docker.com/ | sh
         else
-            wget get.docker.com -O get.docker.sh
-            bash get.docker.sh --mirror Aliyun
-            rm -rf get.docker.sh
+            bash <(curl -sSL https://gitee.com/SuperManito/LinuxMirrors/raw/main/DockerInstallation.sh)
         fi
     fi
-    
-    # 安装Docker Compose
     if ! command -v docker-compose >/dev/null 2>&1; then
-        _yellow "正在安装Docker Compose"
-        curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m)" -o /usr/local/bin/docker-compose
-        chmod +x /usr/local/bin/docker-compose
-        docker-compose --version
+        if [[ -z "${CN}" || "${CN}" != true ]]; then
+            _yellow "Installing docker-compose"
+            curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m)" -o /usr/local/bin/docker-compose
+            chmod +x /usr/local/bin/docker-compose
+            docker-compose --version
+        fi
     fi
-    
-    # 启用Docker服务
-    systemctl enable --now docker
     sleep 1
 }
 
@@ -183,9 +200,9 @@ configure_system() {
     sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="\(.*\)"/GRUB_CMDLINE_LINUX_DEFAULT="\1 swapaccount=1"/' "$grub_config"
     sed -i 's/GRUB_CMDLINE_LINUX="\(.*\)"/GRUB_CMDLINE_LINUX="\1 swapaccount=1"/' "$grub_config"
     update-grub
-    
+
     _green "你需要重启服务器以启用修改。"
-    echo "1" > /usr/local/bin/reboot_pterodactyl.txt
+    echo "1" >/usr/local/bin/reboot_pterodactyl.txt
 }
 
 #######################
@@ -202,7 +219,7 @@ install_pterodactyl_wings() {
 #######################
 configure_wings_service() {
     # 创建systemd服务
-    cat <<EOF > /etc/systemd/system/wings.service
+    cat <<EOF >/etc/systemd/system/wings.service
 [Unit]
 Description=Pterodactyl Wings Daemon
 After=docker.service
@@ -239,10 +256,10 @@ main() {
     check_update
     check_ipv4
     create_directories
-    
     # 检查是否已安装
     if [ ! -f "/etc/pterodactyl/config.yml" ]; then
         if [ ! -f "/usr/local/bin/reboot_pterodactyl.txt" ]; then
+            check_china
             install_docker_and_compose
             configure_system
         fi
@@ -250,7 +267,6 @@ main() {
     else
         configure_wings_service
     fi
-    
     _green "Pterodactyl Wings 安装/配置已完成!"
 }
 

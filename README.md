@@ -6,26 +6,22 @@
 
 | 系统类型    | 版本范围                    | 备注         |
 |-------------|----------------------------|--------------|
-| Ubuntu      | 20.04, 22.04, 24.04        | 已支持       |
-| Debian      | 10 (Buster), 11 (Bullseye) | 未支持       |
+| Ubuntu      | 20.04(推荐), 22.04, 24.04  | 已支持       |
+| Debian      | 10 (Buster), 11 (Bullseye) | 已支持       |
 | CentOS      | 7                          | 未支持       |
 | AlmaLinux   | 8, 9                       | 未支持       |
 | Rocky Linux | 8, 9                       | 未支持       |
 
 ## 更新
 
-2025.04.13
+2025.04.14
 
-- 测试修复panel和wings的安装
+- 测试修复debian上的panel和wings的安装
 
 ## Panel
 
 ```shell
-curl -slk https://raw.githubusercontent.com/oneclickvirt/pterodactyl/main/scripts/install_pterodactyl.sh -o install_pterodactyl.sh && chmod 777 install_pterodactyl.sh
-```
-
-```shell
-bash install_pterodactyl.sh
+curl -slk https://raw.githubusercontent.com/oneclickvirt/pterodactyl/main/scripts/install_pterodactyl.sh -o install_pterodactyl.sh && chmod 777 install_pterodactyl.sh && bash install_pterodactyl.sh
 ```
 
 ## Wings
