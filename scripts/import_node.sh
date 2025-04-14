@@ -15,12 +15,6 @@ check_root() {
     fi
 }
 
-# URL 解码函数
-url_decode() {
-    local input="${1//+/ }"   # 将加号替换为空格
-    echo -e "${input//%/\\x}" # 解析百分号编码
-}
-
 # 检查IP是否为私有IPv4
 is_private_ipv4() {
     local ip_address=$1
@@ -124,6 +118,15 @@ create_node() {
     return 0
 }
 
+# URL 解码函数
+url_decode() {
+    local encoded=$1
+    local space_replaced="${encoded//+/ }"
+    local decoded=$(python3 -c "import urllib.parse; print(urllib.parse.unquote('$space_replaced'))")
+    echo "$decoded"
+}
+
+# 模拟登录面板
 login_panel() {
     local panel_url=$1
     local admin_email=$2
@@ -131,28 +134,30 @@ login_panel() {
     echo "正在登录Pterodactyl面板: $panel_url"
     rm -f "$COOKIES_FILE"
     curl -s -c "$COOKIES_FILE" "${panel_url}/sanctum/csrf-cookie"
-    local initial_csrf=$(grep "XSRF-TOKEN" "$COOKIES_FILE" | awk '{print $7}' | url_decode)
-    if [ -z "$initial_csrf" ]; then
-        echo "错误：无法获取初始CSRF令牌"
+    local raw_token=$(grep "XSRF-TOKEN" "$COOKIES_FILE" | awk '{print $7}')
+    local xsrf_token=$(url_decode "$raw_token")
+    if [ -z "$xsrf_token" ]; then
+        echo "获取不到 XSRF-TOKEN"
         return 1
     fi
-    echo "获取到初始CSRF令牌: $initial_csrf"
-    local LOGIN_RESPONSE=$(curl -s -c "$COOKIES_FILE" -b "$COOKIES_FILE" -X POST "$panel_url/auth/login" \
-        -H "X-XSRF-TOKEN: $initial_csrf" \
-        -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0' \
-        -H 'Accept: application/json' \
-        -H 'Content-Type: application/json' \
-        -H 'X-Requested-With: XMLHttpRequest' \
+    echo "解码后的 XSRF-TOKEN: $xsrf_token"
+    local login_response=$(curl -s -c "$COOKIES_FILE" -b "$COOKIES_FILE" -X POST "$panel_url/auth/login" \
+        -H "Content-Type: application/json" \
+        -H "X-XSRF-TOKEN: $xsrf_token" \
         -H "Referer: ${panel_url}/auth/login" \
+        -H "X-Requested-With: XMLHttpRequest" \
+        -H "Accept: application/json" \
         --data-raw "{\"user\":\"$admin_email\",\"password\":\"$admin_password\",\"g-recaptcha-response\":\"\"}")
-    echo "登录响应: $LOGIN_RESPONSE"
-    if echo "$LOGIN_RESPONSE" | grep -q "错误" || echo "$LOGIN_RESPONSE" | grep -q "token_mismatch" || ! echo "$LOGIN_RESPONSE" | grep -q "\"complete\":true"; then
+    echo "登录响应状态码：$(curl -s -o /dev/null -w "%{http_code}" -b "$COOKIES_FILE" "$panel_url/admin")"
+    echo "登录响应文本：$login_response"
+    if ! echo "$login_response" | grep -q "\"complete\":true"; then
         echo "错误：面板登录失败，请检查用户名和密码是否正确！"
         return 1
     fi
-    local CSRF_TOKEN=$(grep "XSRF-TOKEN" "$COOKIES_FILE" | awk '{print $7}' | url_decode)
-    echo "登录成功，获取到CSRF Token: $CSRF_TOKEN"
-    echo "$CSRF_TOKEN"
+    local updated_token=$(grep "XSRF-TOKEN" "$COOKIES_FILE" | awk '{print $7}')
+    local updated_xsrf_token=$(url_decode "$updated_token")
+    echo "登录成功，获取到CSRF Token: $updated_xsrf_token"
+    echo "$updated_xsrf_token"
     return 0
 }
 
