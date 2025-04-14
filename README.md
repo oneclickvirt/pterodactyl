@@ -30,6 +30,14 @@ curl -slk https://raw.githubusercontent.com/oneclickvirt/pterodactyl/main/script
 curl -slk https://raw.githubusercontent.com/oneclickvirt/pterodactyl/main/scripts/install_wings.sh -o install_wings.sh && chmod 777 install_wings.sh && bash install_wings.sh
 ```
 
+## Import
+
+测试中，不要使用
+
+```
+curl -slk https://raw.githubusercontent.com/oneclickvirt/pterodactyl/main/scripts/import_node.sh -o import_node.sh && chmod 777 import_node.sh && bash import_node.sh
+```
+
 ## Thanks
 
 https://pterodactyl.io/
