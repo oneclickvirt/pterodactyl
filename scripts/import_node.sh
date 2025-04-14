@@ -1,0 +1,18 @@
+php artisan p:node:make \
+  --name="$(hostname -I | awk '{print $1}')" \
+  --description="Auto-generated node" \
+  --locationId=1 \
+  --fqdn=$(hostname -I | awk '{print $1}') \
+  --public=1 \
+  --scheme=http \
+  --proxy=0 \
+  --maintenance=0 \
+  --maxMemory=4096 \
+  --overallocateMemory=0 \
+  --maxDisk=20000 \
+  --overallocateDisk=0 \
+  --uploadSize=100 \
+  --daemonListeningPort=8080 \
+  --daemonSFTPPort=2022 \
+  --daemonBase="/var/lib/pterodactyl" \
+  -n
