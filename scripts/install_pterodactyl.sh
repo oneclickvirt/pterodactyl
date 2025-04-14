@@ -264,12 +264,29 @@ install_debian_ubuntu_packages() {
     fi
     # 更新和安装必要包
     apt update
-    apt-get -y install php8.3 php8.3-{common,cli,gd,mysql,mbstring,bcmath,xml,fpm,curl,zip} nginx redis-server
+    PHP_VERSIONS=("8.3" "8.2" "8.1")
+    INSTALL_SUCCESS=0
+    for VERSION in "${PHP_VERSIONS[@]}"; do
+        echo "尝试安装 PHP $VERSION..."
+        if apt-get update && apt-get -y install php$VERSION php$VERSION-{common,cli,gd,mysql,mbstring,bcmath,xml,fpm,curl,zip}; then
+            echo "PHP $VERSION 安装成功！"
+            INSTALL_SUCCESS=1
+            break
+        else
+            echo "PHP $VERSION 安装失败，尝试下一个版本..."
+        fi
+    done
+    if [ "$INSTALL_SUCCESS" -ne 1 ]; then
+        echo "所有指定的 PHP 版本都安装失败，退出程序。"
+        exit 1
+    fi
+    apt-get -y install nginx redis-server
 }
 
 # 为CentOS安装包
 install_centos_packages() {
     yum -y install epel-release curl
+    # yum -y install https://rpms.remirepo.net/enterprise/remi-release-7.rpm
     yum -y install https://rpms.remirepo.net/enterprise/remi-release-8.rpm
     yum -y install yum-utils
     yum-config-manager --disable remi-php54
@@ -293,7 +310,23 @@ install_centos_packages() {
     fi
     # 更新和安装必要包
     yum update
-    yum -y install php php-{common,cli,gd,mysql,mbstring,bcmath,xml,fpm,curl,zip} nginx redis
+    for VERSION in "${PHP_VERSIONS[@]}"; do
+        echo "尝试安装 PHP $VERSION..."
+        yum-config-manager --disable 'remi-php*'
+        yum-config-manager --enable "remi-php${VERSION/./}"
+        if yum -y install php php-{common,cli,gd,mysql,mbstring,bcmath,xml,fpm,curl,zip}; then
+            echo "PHP $VERSION 安装成功！"
+            INSTALL_SUCCESS=1
+            break
+        else
+            echo "PHP $VERSION 安装失败，尝试下一个版本..."
+        fi
+    done
+    if [ "$INSTALL_SUCCESS" -ne 1 ]; then
+        echo "所有指定的 PHP 版本都安装失败，退出程序。"
+        exit 1
+    fi
+    yum -y install nginx redis
     # 启动服务
     systemctl start mariadb
     systemctl enable mariadb
