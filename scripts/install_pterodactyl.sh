@@ -68,8 +68,52 @@ reading() { read -rp "$(_green "$1")" "$2"; }
 check_update() {
     _yellow "更新包管理源"
     if command -v apt-get >/dev/null 2>&1; then
+        distro=""
+        codename=""
+        is_archive=false
+        # 识别系统版本
+        if grep -qi debian /etc/os-release; then
+            distro="debian"
+            debian_ver=$(grep VERSION= /etc/os-release | grep -oE '[0-9]+' | head -n1)
+            case "$debian_ver" in
+                10) codename="buster" ; is_archive=true ;;
+                9)  codename="stretch"; is_archive=true ;;
+                8)  codename="jessie" ; is_archive=true ;;
+            esac
+        elif grep -qi ubuntu /etc/os-release; then
+            distro="ubuntu"
+            codename=$(grep VERSION_CODENAME /etc/os-release | cut -d= -f2)
+            case "$codename" in
+                xenial|bionic|eoan|groovy|artful|zesty|yakkety|vivid|wily|utopic)
+                    is_archive=true
+                    ;;
+            esac
+        fi
+        # 如为归档版本，则替换为归档源
+        if [[ "$is_archive" == true ]]; then
+            _yellow "检测到归档系统：$distro $codename，正在替换为归档源"
+            if [[ "$distro" == "debian" ]]; then
+                cat >/etc/apt/sources.list <<EOF
+deb http://archive.debian.org/debian/ $codename main contrib non-free
+deb-src http://archive.debian.org/debian/ $codename main contrib non-free
+deb http://archive.debian.org/debian-security/ $codename/updates main contrib non-free
+deb-src http://archive.debian.org/debian-security/ $codename/updates main contrib non-free
+EOF
+                mkdir -p /etc/apt/apt.conf.d
+                echo 'Acquire::Check-Valid-Until "false";' >/etc/apt/apt.conf.d/99ignore-release-date
+            elif [[ "$distro" == "ubuntu" ]]; then
+                cat >/etc/apt/sources.list <<EOF
+deb http://old-releases.ubuntu.com/ubuntu/ $codename main restricted universe multiverse
+deb http://old-releases.ubuntu.com/ubuntu/ $codename-updates main restricted universe multiverse
+deb http://old-releases.ubuntu.com/ubuntu/ $codename-security main restricted universe multiverse
+EOF
+            fi
+            _green "已替换为归档源：$distro $codename"
+        fi
+        # 更新包列表
         apt_update_output=$(apt-get update 2>&1)
         echo "$apt_update_output" >"$temp_file_apt_fix"
+        # 修复 NO_PUBKEY 问题
         if grep -q 'NO_PUBKEY' "$temp_file_apt_fix"; then
             public_keys=$(grep -oE 'NO_PUBKEY [0-9A-F]+' "$temp_file_apt_fix" | awk '{ print $2 }')
             joined_keys=$(echo "$public_keys" | paste -sd " ")
@@ -80,7 +124,7 @@ check_update() {
                 _green "已修复"
             fi
         fi
-        rm "$temp_file_apt_fix"
+        rm -f "$temp_file_apt_fix"
     else
         ${PACKAGE_UPDATE[int]}
     fi
