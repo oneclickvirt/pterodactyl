@@ -89,7 +89,7 @@ check_update() {
                     ;;
             esac
         fi
-        # 如为归档版本，则替换为归档源
+        # 如为归档版本，则替换为归档源，并设置 OVERRIDE_CODENAME
         if [[ "$is_archive" == true ]]; then
             _yellow "检测到归档系统：$distro $codename，正在替换为归档源"
             if [[ "$distro" == "debian" ]]; then
@@ -101,16 +101,19 @@ deb-src http://archive.debian.org/debian/ $codename main contrib non-free
 EOF
                 mkdir -p /etc/apt/apt.conf.d
                 echo 'Acquire::Check-Valid-Until "false";' >/etc/apt/apt.conf.d/99ignore-release-date
+                export OVERRIDE_CODENAME="bullseye"
             elif [[ "$distro" == "ubuntu" ]]; then
                 cat >/etc/apt/sources.list <<EOF
 deb http://old-releases.ubuntu.com/ubuntu/ $codename main restricted universe multiverse
 deb http://old-releases.ubuntu.com/ubuntu/ $codename-updates main restricted universe multiverse
 #deb http://old-releases.ubuntu.com/ubuntu/ $codename-security main restricted universe multiverse
 EOF
+                export OVERRIDE_CODENAME="jammy"
             fi
-            _green "已替换为归档源：$distro $codename"
+            _green "已替换为归档源：$distro $codename，使用新仓库 codename：$OVERRIDE_CODENAME"
         fi
         # 更新包列表
+        temp_file_apt_fix=$(mktemp)
         apt_update_output=$(apt-get update 2>&1)
         echo "$apt_update_output" >"$temp_file_apt_fix"
         # 修复 NO_PUBKEY 问题
@@ -230,21 +233,23 @@ install_system_packages() {
 # 为Debian/Ubuntu安装包
 install_debian_ubuntu_packages() {
     apt-get -y install software-properties-common curl apt-transport-https ca-certificates gnupg
+    # 确定使用的 codename
+    CODENAME=${OVERRIDE_CODENAME:-$(lsb_release -sc)}
     # 添加PHP仓库
     if [[ "${RELEASE[int]}" == "Ubuntu" ]]; then
         LC_ALL=C.UTF-8 add-apt-repository -y ppa:ondrej/php
     else
         if [ ! -d /etc/apt/sources.list.d/sury-php.list ]; then
-            echo "deb https://packages.sury.org/php/ $(lsb_release -sc) main" | tee /etc/apt/sources.list.d/sury-php.list
+            echo "deb https://packages.sury.org/php/ $CODENAME main" | tee /etc/apt/sources.list.d/sury-php.list
         fi
         wget -qO - https://packages.sury.org/php/apt.gpg | apt-key add -
     fi
     # 添加Redis仓库
-    if [ ! -d /usr/share/keyrings/redis-archive-keyring.gpg ]; then
+    if [ ! -f /usr/share/keyrings/redis-archive-keyring.gpg ]; then
         curl -fsSL https://packages.redis.io/gpg | gpg --dearmor -o /usr/share/keyrings/redis-archive-keyring.gpg
     fi
-    if [ ! -d /etc/apt/sources.list.d/redis.list ]; then
-        echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/redis.list
+    if [ ! -f /etc/apt/sources.list.d/redis.list ]; then
+        echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb $CODENAME main" | tee /etc/apt/sources.list.d/redis.list
     fi
     # 安装MariaDB
     apt-get -y install mariadb-server
