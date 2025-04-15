@@ -243,12 +243,27 @@ def get_latest_node_id() -> int:
         return 1
 
 def generate_install_token(panel_url: str, panel_email: str, panel_password: str, node_id: int) -> Optional[str]:
-    """为节点生成安装令牌，并确保重新获取 CSRF Token 和 Cookies"""
+    """为节点生成安装令牌，并从HTML中获取CSRF Token"""
     print(f"正在为节点ID {node_id} 生成安装令牌...")
     try:
-        SESSION.get(f"{panel_url}/sanctum/csrf-cookie")
-        updated_token = SESSION.cookies.get("XSRF-TOKEN")
-        csrf_token = urllib.parse.unquote(updated_token)
+        # 先获取节点配置页面HTML
+        config_url = f"{panel_url}/admin/nodes/view/{node_id}/configuration"
+        print(f"获取配置页面: {config_url}")
+        response = SESSION.get(config_url)
+        if response.status_code != 200:
+            print(f"获取配置页面失败，状态码: {response.status_code}")
+            return None
+        # 从HTML中解析CSRF Token
+        html_content = response.text
+        csrf_token_match = re.search(r'<meta name="_token" content="([^"]+)"', html_content)
+        if not csrf_token_match:
+            print("无法从页面中解析CSRF Token")
+            return None
+        
+        csrf_token = csrf_token_match.group(1)
+        print(f"从HTML中解析到的CSRF Token: {csrf_token}")
+        
+        # 准备请求头
         headers = {
             "X-CSRF-TOKEN": csrf_token,
             "Accept": "*/*",
@@ -258,8 +273,9 @@ def generate_install_token(panel_url: str, panel_email: str, panel_password: str
             "Referer": f"{panel_url}/admin/nodes/view/{node_id}/configuration",
             "Content-Length": "0"
         }
+        # 发送请求获取安装令牌
         token_url = f"{panel_url}/admin/nodes/view/{node_id}/settings/token"
-        print(f"请求URL: {token_url}")
+        print(f"请求生成令牌URL: {token_url}")
         print(f"使用Cookie: {SESSION.cookies.get_dict()}")
         token_response = SESSION.post(token_url, headers=headers)
         if token_response.status_code != 200:
