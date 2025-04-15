@@ -41,6 +41,12 @@ panel端执行：
 curl -slk https://raw.githubusercontent.com/oneclickvirt/pterodactyl/main/scripts/import_node.py -o import_node.py && chmod 777 import_node.py && python3 import_node.py
 ```
 
+或
+
+```shell
+curl -slk https://raw.githubusercontent.com/oneclickvirt/pterodactyl/main/scripts/import_node.py -o import_node.sh && chmod 777 import_node.sh && bash import_node.sh
+```
+
 会生成需要在wings端执行的命令
 
 生成的命令执行完毕后，wings端再执行：
