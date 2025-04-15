@@ -38,12 +38,6 @@ curl -slk https://raw.githubusercontent.com/oneclickvirt/pterodactyl/main/script
 panel端执行：
 
 ```shell
-curl -slk https://raw.githubusercontent.com/oneclickvirt/pterodactyl/main/scripts/import_node.py -o import_node.py && chmod 777 import_node.py && python3 import_node.py
-```
-
-或
-
-```shell
 curl -slk https://raw.githubusercontent.com/oneclickvirt/pterodactyl/main/scripts/import_node.sh -o import_node.sh && chmod 777 import_node.sh && bash import_node.sh
 ```
 
