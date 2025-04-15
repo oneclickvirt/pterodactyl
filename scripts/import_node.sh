@@ -201,21 +201,17 @@ login_panel() {
 }
 
 get_latest_node_id() {
-    echo "获取最新创建的节点ID..."
     local result
     result=$(php /var/www/pterodactyl/artisan p:node:list --format=json 2>/dev/null)
     if [ $? -ne 0 ] || [ -z "$result" ]; then
-        echo "执行 PHP 命令时出错或结果为空"
         echo "1"
         return
     fi
     local latest_node_id
     latest_node_id=$(echo "$result" | jq '.[-1].id')
     if [ -n "$latest_node_id" ]; then
-        echo "获取到最新节点ID: $latest_node_id"
         echo "$latest_node_id"
     else
-        echo "警告：无法获取最新节点ID，将使用默认值1"
         echo "1"
     fi
 }
@@ -225,24 +221,18 @@ generate_install_token() {
     local panel_email=$2
     local panel_password=$3
     local node_id=$4
-    echo "正在为节点ID $node_id 生成安装令牌..."
     local config_url="$panel_url/admin/nodes/view/$node_id/configuration"
-    echo "获取配置页面: $config_url"
     local html_content
     html_content=$(curl -s -b "$COOKIES_FILE" "$config_url")
     if [ $? -ne 0 ] || [ -z "$html_content" ]; then
-        echo "获取配置页面失败"
         return 1
     fi
     local csrf_token
     csrf_token=$(echo "$html_content" | grep -oP '<meta name="_token" content="\K[^"]+')
     if [ -z "$csrf_token" ]; then
-        echo "无法从页面中解析CSRF Token"
         return 1
     fi
-    echo "从HTML中解析到的CSRF Token: $csrf_token"
     local token_url="$panel_url/admin/nodes/view/$node_id/settings/token"
-    echo "请求生成令牌URL: $token_url"
     local token_response
     token_response=$(curl -s -b "$COOKIES_FILE" \
         -H "X-CSRF-TOKEN: $csrf_token" \
@@ -254,17 +244,13 @@ generate_install_token() {
         -X POST \
         "$token_url")
     if [ $? -ne 0 ] || [ -z "$token_response" ]; then
-        echo "错误：请求失败"
-        echo "响应内容: $token_response"
         return 1
     fi
     local install_token
     install_token=$(echo "$token_response" | grep -oP '"token":"\K[^"]+')
     if [ -z "$install_token" ]; then
-        echo "错误：生成安装令牌失败！响应内容: $token_response"
         return 1
     fi
-    echo "安装令牌生成成功"
     echo "$install_token"
 }
 
