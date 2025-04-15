@@ -44,7 +44,7 @@ curl -slk https://raw.githubusercontent.com/oneclickvirt/pterodactyl/main/script
 或
 
 ```shell
-curl -slk https://raw.githubusercontent.com/oneclickvirt/pterodactyl/main/scripts/import_node.py -o import_node.sh && chmod 777 import_node.sh && bash import_node.sh
+curl -slk https://raw.githubusercontent.com/oneclickvirt/pterodactyl/main/scripts/import_node.sh -o import_node.sh && chmod 777 import_node.sh && bash import_node.sh
 ```
 
 会生成需要在wings端执行的命令
