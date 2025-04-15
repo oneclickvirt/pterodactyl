@@ -228,11 +228,6 @@ generate_admin_api_key() {
     local panel_url=$1
     local api_page_url="$panel_url/admin/api"
     local key_file="AdminKey.txt"
-    if [ -s "$key_file" ]; then
-        echo "API 密钥已存在于 $key_file，跳过生成。"
-        G_ADMIN_KEY=$(cat "$key_file")
-        return 0
-    fi
     echo "正在获取 API 页面..."
     sleep 1
     local api_page_content
