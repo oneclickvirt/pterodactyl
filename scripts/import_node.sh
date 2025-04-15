@@ -2,6 +2,7 @@
 # https://github.com/oneclickvirt/pterodactyl
 # 2025.04.15
 
+myvar=$(pwd)
 PANEL_DIR="/var/www/pterodactyl"
 USER_FILE="$PANEL_DIR/auto_users.txt"
 COOKIES_FILE="/tmp/pterodactyl_cookies.txt"
@@ -169,6 +170,7 @@ login_panel() {
     rm -f "$COOKIES_FILE" 2>/dev/null
     local csrf_response
     csrf_response=$(curl -s -c "$COOKIES_FILE" -b "$COOKIES_FILE" "$panel_url/sanctum/csrf-cookie")
+    sleep 1
     local xsrf_token
     xsrf_token=$(grep -oP 'XSRF-TOKEN\s+\K[^\s]+' "$COOKIES_FILE" | sed 's/%3D/=/g' | sed 's/%3d/=/g')
     if [ -z "$xsrf_token" ]; then
@@ -188,7 +190,9 @@ login_panel() {
         -d "$login_data" \
         "$panel_url/auth/login")
     local admin_check_status
+    sleep 1
     admin_check_status=$(curl -s -o /dev/null -w "%{http_code}" -c "$COOKIES_FILE" -b "$COOKIES_FILE" "$panel_url/admin")
+    sleep 1
     echo "$panel_url/admin 登录响应状态码：$admin_check_status"
     echo "登录响应文本：${login_response:0:200}"
     if ! echo "$login_response" | grep -q '"complete":true'; then
@@ -231,6 +235,7 @@ generate_admin_api_key() {
     fi
     echo "正在获取API页面的CSRF令牌..."
     local api_page_content
+    sleep 1
     api_page_content=$(curl -s -b "$COOKIES_FILE" "$api_page_url")
     if [ $? -ne 0 ] || [ -z "$api_page_content" ]; then
         echo "获取API页面失败"
@@ -245,6 +250,7 @@ generate_admin_api_key() {
     echo "获取到API页面CSRF令牌: $api_csrf_token"
     echo "正在创建新的API密钥..."
     local create_api_response
+    sleep 1
     create_api_response=$(curl -s -b "$COOKIES_FILE" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -H "Origin: $panel_url" \
@@ -279,6 +285,7 @@ generate_install_token() {
     local node_id=$2
     local config_url="$panel_url/admin/nodes/view/$node_id/configuration"
     local html_content
+    sleep 1
     html_content=$(curl -s -b "$COOKIES_FILE" "$config_url")
     if [ $? -ne 0 ] || [ -z "$html_content" ]; then
         return 1
@@ -290,6 +297,7 @@ generate_install_token() {
     fi
     local token_url="$panel_url/admin/nodes/view/$node_id/settings/token"
     local token_response
+    sleep 1
     token_response=$(curl -s -b "$COOKIES_FILE" \
         -H "X-CSRF-TOKEN: $csrf_token" \
         -H "Accept: */*" \
@@ -312,11 +320,14 @@ generate_install_token() {
 }
 
 show_wings_install_command() {
+    cd $myvar >/dev/null 2>&1
     local panel_url=$1
     local install_token=$2
     local node_id=$3
-    echo -e "在wings端一键导入配置的命令："
-    echo "(cd /etc/pterodactyl && sudo wings configure --panel-url "$panel_url" --token "$install_token" --node "$node_id")"
+    local cmd="(cd /etc/pterodactyl && sudo wings configure --panel-url \"$panel_url\" --token \"$install_token\" --node \"$node_id\")"
+    echo -e "在wings端一键导入配置的命令[带英文括号]，同时该命令保存在当前路径下的 wings_cmd.txt 文件中避免遗忘："
+    echo "$cmd"
+    echo "$cmd" >> ./wings_cmd.txt
 }
 
 main() {
