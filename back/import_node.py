@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # https://github.com/oneclickvirt/pterodactyl
 # 2025.04.15
+# curl -slk https://raw.githubusercontent.com/oneclickvirt/pterodactyl/main/back/import_node.py -o import_node.py && chmod 777 import_node.py && python3 import_node.py
 
 import os
 import sys
