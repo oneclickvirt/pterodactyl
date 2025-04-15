@@ -269,7 +269,7 @@ generate_admin_api_key() {
         echo "重新获取API页面失败"
         return 1
     fi
-    admin_key=$(echo "$api_page_content" | grep -oP '<td><code>ptla_\K[^<]+(?=</code></td>\s*<td>AdminKey</td>)')
+    admin_key=$(echo "$api_page_content" | tr -d '\n' | grep -oP '<td><code>(ptla_[^<]+)</code></td>\s*<td>AdminKey</td>' | grep -oP 'ptla_[^<]+')
     if [ -z "$admin_key" ]; then
         echo "无法从响应中提取API密钥"
         return 1
