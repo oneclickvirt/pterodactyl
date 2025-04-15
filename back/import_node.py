@@ -255,8 +255,8 @@ def generate_install_token(panel_url: str, panel_email: str, panel_password: str
         return None
 
 def show_wings_install_command(panel_url: str, install_token: str, node_id: int) -> None:
-    print("\n一键导入命令：\n")
-    print(f"cd /etc/pterodactyl && sudo wings configure --panel-url {panel_url} --token {install_token} --node {node_id}")
+    print("在wings端一键导入配置的命令：")
+    print(f"(cd /etc/pterodactyl && sudo wings configure --panel-url {panel_url} --token {install_token} --node {node_id})")
 
 def main() -> None:
     check_root()
