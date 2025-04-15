@@ -218,6 +218,10 @@ install_basic_dependencies() {
         _yellow "安装 sudo"
         ${PACKAGE_INSTALL[int]} sudo
     fi
+    if ! command -v jq >/dev/null 2>&1; then
+        _yellow "安装 jq"
+        ${PACKAGE_INSTALL[int]} jq
+    fi
 }
 
 # 根据系统安装软件包
