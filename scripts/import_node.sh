@@ -95,7 +95,7 @@ get_ipv4() {
     echo "127.0.0.1"
 }
 
-# 读取面板配置信息
+
 read_panel_config() {
     if [ ! -f "$USER_FILE" ]; then
         echo "错误：找不到文件 $USER_FILE，请确保面板已正确安装并生成用户信息文件。"
@@ -106,24 +106,22 @@ read_panel_config() {
     local admin_password=""
     while IFS= read -r line; do
         if echo "$line" | grep -q "登录页面"; then
-            panel_url=$(echo "$line" | awk -F: '{print $3}' | sed 's/\/\///')
+            panel_url=$(echo "$line" | sed -n 's/.*登录页面：\(.*\)/\1/p' | sed 's/^ *//')
         elif echo "$line" | grep -q "用户名"; then
-            admin_email=$(echo "$line" | cut -d':' -f2- | xargs)
+            admin_email=$(echo "$line" | sed -n 's/.*用户名：\(.*\)/\1/p' | sed 's/^ *//')
         elif echo "$line" | grep -q "密码"; then
-            admin_password=$(echo "$line" | cut -d':' -f2- | xargs)
+            admin_password=$(echo "$line" | sed -n 's/.*密码：\(.*\)/\1/p' | sed 's/^ *//')
         fi
     done < "$USER_FILE"
     if [ -z "$panel_url" ] || [ -z "$admin_email" ] || [ -z "$admin_password" ]; then
-        echo "错误：无法从文件 $USER_FILE 中读取面板信息，请检查文件格式！"
+        echo "错误：无法从文件 $USER_FILE 中读取面板信息，请检查文件格式！" >&2
         exit 1
     fi
     if ! echo "$panel_url" | grep -q "^http"; then
         panel_url="http://$panel_url"
     fi
     panel_url=${panel_url%/}
-    echo "$panel_url"
-    echo "$admin_email"
-    echo "$admin_password"
+    echo "$panel_url|$admin_email|$admin_password"
 }
 
 create_node() {
@@ -318,9 +316,13 @@ main() {
         echo "节点创建失败，脚本中断"
         exit 1
     fi
-    read -r panel_url admin_email admin_password < <(read_panel_config)
-    echo "面板地址: $panel_url"
-    echo "管理员邮箱: $admin_email"
+    panel_config=$(read_panel_config)
+    panel_url=$(echo "$panel_config" | cut -d'|' -f1)
+    admin_email=$(echo "$panel_config" | cut -d'|' -f2)
+    admin_password=$(echo "$panel_config" | cut -d'|' -f3)
+    echo "解析到的面板地址: $panel_url"
+    echo "解析到的管理员邮箱: $admin_email"
+    echo "解析到的管理员密码: ${admin_password:0:2}****"
     csrf_token=$(login_panel "$panel_url" "$admin_email" "$admin_password")
     if [ $? -ne 0 ] || [ -z "$csrf_token" ]; then
         echo "面板登录失败，脚本中断"
