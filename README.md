@@ -43,11 +43,13 @@ curl -slk https://raw.githubusercontent.com/oneclickvirt/pterodactyl/main/script
 
 会生成需要在wings端执行的命令
 
-生成的命令执行完毕后，wings端再执行：
+生成的命令执行完毕后等待20秒以上，避免一些初始化流程未走完，然后wings端再执行：
 
 ```shell
 bash install_wings.sh
 ```
+
+然后在```http://<your_ip>/admin/nodes```就能看到你的节点已经被自动添加纳管，心跳是绿色的
 
 ## Thanks
 
