@@ -14,6 +14,7 @@ G_ADMIN_PASSWORD=""
 G_CSRF_TOKEN=""
 G_NODE_ID=""
 G_INSTALL_TOKEN=""
+G_ADMIN_KEY=""
 
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
@@ -219,6 +220,54 @@ get_latest_node_id() {
     return 0
 }
 
+generate_admin_api_key() {
+    local panel_url=$1
+    local api_page_url="$panel_url/admin/api"
+    local key_file="AdminKey.txt"
+    if [ -s "$key_file" ]; then
+        echo "API 密钥已存在于 $key_file，跳过生成。"
+        G_ADMIN_KEY=$(cat "$key_file")
+        return 0
+    fi
+    echo "正在获取API页面的CSRF令牌..."
+    local api_page_content
+    api_page_content=$(curl -s -b "$COOKIES_FILE" "$api_page_url")
+    if [ $? -ne 0 ] || [ -z "$api_page_content" ]; then
+        echo "获取API页面失败"
+        return 1
+    fi
+    local api_csrf_token
+    api_csrf_token=$(echo "$api_page_content" | grep -oP '<meta name="_token" content="\K[^"]+')
+    if [ -z "$api_csrf_token" ]; then
+        echo "无法获取API页面的CSRF令牌"
+        return 1
+    fi
+    echo "获取到API页面CSRF令牌: $api_csrf_token"
+    echo "正在创建新的API密钥..."
+    local create_api_response
+    create_api_response=$(curl -s -b "$COOKIES_FILE" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -H "Origin: $panel_url" \
+        -H "Referer: $panel_url/admin/api/new" \
+        -X POST \
+        --data-raw "r_allocations=3&r_database_hosts=3&r_eggs=3&r_locations=3&r_nests=3&r_nodes=3&r_server_databases=3&r_servers=3&r_users=3&memo=AdminKey&_token=$api_csrf_token" \
+        "$panel_url/admin/api/new")
+    if [ $? -ne 0 ] || [ -z "$create_api_response" ]; then
+        echo "创建API密钥请求失败"
+        return 1
+    fi
+    local admin_key
+    admin_key=$(echo "$create_api_response" | grep -oP '<td><code>ptla_\K[^<]+')
+    if [ -z "$admin_key" ]; then
+        echo "无法从响应中提取API密钥"
+        return 1
+    fi
+    G_ADMIN_KEY="ptla_$admin_key"
+    echo "成功创建API密钥: $G_ADMIN_KEY"
+    echo "$G_ADMIN_KEY" > "$key_file"
+    return 0
+}
+
 generate_install_token() {
     local panel_url=$1
     local node_id=$2
@@ -317,6 +366,7 @@ main() {
         echo "面板登录失败，脚本中断"
         exit 1
     fi
+    generate_admin_api_key "$G_PANEL_URL"
     get_latest_node_id
     echo "将使用节点ID: $G_NODE_ID"
     echo -n "请确认节点ID [默认: $G_NODE_ID]: "
