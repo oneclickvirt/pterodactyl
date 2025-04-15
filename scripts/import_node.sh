@@ -233,49 +233,51 @@ generate_admin_api_key() {
         G_ADMIN_KEY=$(cat "$key_file")
         return 0
     fi
-    echo "正在获取API页面的CSRF令牌..."
-    local api_page_content
+    echo "正在获取 API 页面..."
     sleep 1
+    local api_page_content
     api_page_content=$(curl -s -b "$COOKIES_FILE" "$api_page_url")
     if [ $? -ne 0 ] || [ -z "$api_page_content" ]; then
-        echo "获取API页面失败"
+        echo "获取 API 页面失败"
         return 1
     fi
+    local admin_key
+    admin_key=$(echo "$api_page_content" | tr -d '\n' | grep -oP '<td><code>(ptla_[^<]+)</code></td>\s*<td>AdminKey</td>' | grep -oP 'ptla_[^<]+')
+    if [ -n "$admin_key" ]; then
+        echo "发现已有 AdminKey，直接使用该密钥。"
+        G_ADMIN_KEY="$admin_key"
+        echo "$G_ADMIN_KEY" > "$key_file"
+        return 0
+    fi
+    echo "未找到现有密钥，尝试创建新的 API 密钥..."
     local api_csrf_token
     api_csrf_token=$(echo "$api_page_content" | grep -oP '<meta name="_token" content="\K[^"]+')
     if [ -z "$api_csrf_token" ]; then
-        echo "无法获取API页面的CSRF令牌"
+        echo "无法获取 API 页面中的 CSRF 令牌"
         return 1
     fi
-    echo "获取到API页面CSRF令牌: $api_csrf_token"
-    echo "正在创建新的API密钥..."
-    local create_api_response
+    echo "获取到 CSRF 令牌: $api_csrf_token"
     sleep 1
-    create_api_response=$(curl -s -b "$COOKIES_FILE" \
+    curl -s -b "$COOKIES_FILE" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -H "Origin: $panel_url" \
         -H "Referer: $panel_url/admin/api/new" \
         -X POST \
         --data-raw "r_allocations=3&r_database_hosts=3&r_eggs=3&r_locations=3&r_nests=3&r_nodes=3&r_server_databases=3&r_servers=3&r_users=3&memo=AdminKey&_token=$api_csrf_token" \
-        "$panel_url/admin/api/new")
-    if [ $? -ne 0 ] || [ -z "$create_api_response" ]; then
-        echo "创建API密钥请求失败"
-        return 1
-    fi
+        "$panel_url/admin/api/new" > /dev/null
     sleep 3
-    local admin_key
     api_page_content=$(curl -s -b "$COOKIES_FILE" "$api_page_url")
     if [ $? -ne 0 ] || [ -z "$api_page_content" ]; then
-        echo "重新获取API页面失败"
+        echo "重新获取 API 页面失败"
         return 1
     fi
     admin_key=$(echo "$api_page_content" | tr -d '\n' | grep -oP '<td><code>(ptla_[^<]+)</code></td>\s*<td>AdminKey</td>' | grep -oP 'ptla_[^<]+')
     if [ -z "$admin_key" ]; then
-        echo "无法从响应中提取API密钥"
+        echo "无法从响应中提取 API 密钥"
         return 1
     fi
-    G_ADMIN_KEY="ptla_$admin_key"
-    echo "成功创建API密钥: $G_ADMIN_KEY"
+    G_ADMIN_KEY="$admin_key"
+    echo "成功创建 API 密钥: $G_ADMIN_KEY"
     echo "$G_ADMIN_KEY" > "$key_file"
     return 0
 }
