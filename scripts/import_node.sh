@@ -6,6 +6,15 @@ PANEL_DIR="/var/www/pterodactyl"
 USER_FILE="$PANEL_DIR/auto_users.txt"
 COOKIES_FILE="/tmp/pterodactyl_cookies.txt"
 
+# 全局变量，用于存储函数返回值
+G_IPV4=""
+G_PANEL_URL=""
+G_ADMIN_EMAIL=""
+G_ADMIN_PASSWORD=""
+G_CSRF_TOKEN=""
+G_NODE_ID=""
+G_INSTALL_TOKEN=""
+
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
         echo "错误：脚本必须以root权限运行！"
@@ -21,7 +30,7 @@ is_private_ipv4() {
     if ! echo "$ip" | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' >/dev/null; then
         return 0
     fi
-    IFS='.' read -r -a ip_parts <<< "$ip"
+    IFS='.' read -r -a ip_parts <<<"$ip"
     # 10.0.0.0/8
     if [ "${ip_parts[0]}" -eq 10 ]; then
         return 0
@@ -62,17 +71,12 @@ get_ipv4() {
     output=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
     if [ -n "$output" ]; then
         if ! is_private_ipv4 "$output"; then
-            echo "检测到公网IPv4地址: $output"
-            echo "$output"
-            return
-        else
-            echo "检测到内网IPv4地址: $output，将尝试通过API获取公网IP"
+            G_IPV4="$output"
+            return 0
         fi
-    else
-        echo "无法获取本机IPv4地址，将尝试通过API获取"
     fi
     local api_list=(
-        "https://ipv4.ip.sb" 
+        "https://ipv4.ip.sb"
         "https://ipget.net"
         "https://ip.ping0.cc"
         "https://ip4.seeip.org"
@@ -81,45 +85,43 @@ get_ipv4() {
         "https://api.ipify.org"
     )
     for api_url in "${api_list[@]}"; do
-        echo "尝试通过 $api_url 获取公网IP..."
         if ip=$(curl -s --connect-timeout 8 "$api_url"); then
             if [ -n "$ip" ] && ! echo "$ip" | grep -i "error" >/dev/null; then
-                echo "成功获取到公网IP: $ip (通过 $api_url)"
-                echo "$ip"
-                return
+                G_IPV4="$ip"
+                return 0
             fi
         fi
         sleep 1
     done
-    echo "警告：无法获取公网IP地址，请手动设置"
-    echo "127.0.0.1"
+    return 1
 }
 
 read_panel_config() {
     if [ ! -f "$USER_FILE" ]; then
-        exit 1
+        return 1
     fi
-    local panel_url=""
-    local admin_email=""
-    local admin_password=""
+    local panel_ip=""
+    G_PANEL_URL=""
+    G_ADMIN_EMAIL=""
+    G_ADMIN_PASSWORD=""
     while IFS= read -r line; do
         if [[ "$line" == *登录页面* ]]; then
             panel_ip=$(echo "$line" | sed -n 's#.*http://\([^/:]*\).*#\1#p')
-            panel_url="http://$panel_ip"
+            G_PANEL_URL="http://$panel_ip"
         elif [[ "$line" == *用户名* ]]; then
-            admin_email=$(echo "$line" | cut -d':' -f2- | sed 's/^ *//')
+            G_ADMIN_EMAIL=$(echo "$line" | cut -d':' -f2- | sed 's/^ *//')
         elif [[ "$line" == *密码* ]]; then
-            admin_password=$(echo "$line" | cut -d':' -f2- | sed 's/^ *//')
+            G_ADMIN_PASSWORD=$(echo "$line" | cut -d':' -f2- | sed 's/^ *//')
         fi
-    done < "$USER_FILE"
-    panel_url=$(echo "$panel_url" | xargs)
-    admin_email=$(echo "$admin_email" | xargs)
-    admin_password=$(echo "$admin_password" | xargs)
-    if [ -z "$panel_url" ] || [ -z "$admin_email" ] || [ -z "$admin_password" ]; then
-        exit 1
+    done <"$USER_FILE"
+    G_PANEL_URL=$(echo "$G_PANEL_URL" | xargs)
+    G_ADMIN_EMAIL=$(echo "$G_ADMIN_EMAIL" | xargs)
+    G_ADMIN_PASSWORD=$(echo "$G_ADMIN_PASSWORD" | xargs)
+    if [ -z "$G_PANEL_URL" ] || [ -z "$G_ADMIN_EMAIL" ] || [ -z "$G_ADMIN_PASSWORD" ]; then
+        return 1
     fi
-    panel_url=${panel_url%/}
-    echo "$panel_url|$admin_email|$admin_password"
+    G_PANEL_URL=${G_PANEL_URL%/}
+    return 0
 }
 
 create_node() {
@@ -187,7 +189,7 @@ login_panel() {
     local admin_check_status
     admin_check_status=$(curl -s -o /dev/null -w "%{http_code}" -c "$COOKIES_FILE" -b "$COOKIES_FILE" "$panel_url/admin")
     echo "$panel_url/admin 登录响应状态码：$admin_check_status"
-    # echo "登录响应文本：${login_response:0:200}"
+    echo "登录响应文本：${login_response:0:200}"
     if ! echo "$login_response" | grep -q '"complete":true'; then
         echo "错误：面板登录失败，请检查用户名和密码是否正确！"
         return 1
@@ -196,7 +198,7 @@ login_panel() {
     updated_token=$(grep -oP 'XSRF-TOKEN\s+\K[^\s]+' "$COOKIES_FILE" | sed 's/%3D/=/g' | sed 's/%3d/=/g')
     updated_token=$(echo "$updated_token" | sed -e 's/%\([0-9A-F][0-9A-F]\)/\\\\\\x\1/g' | xargs -0 printf "%b")
     echo "登录成功，获取到CSRF Token: $updated_token"
-    echo "$updated_token"
+    G_CSRF_TOKEN="$updated_token"
     return 0
 }
 
@@ -204,23 +206,22 @@ get_latest_node_id() {
     local result
     result=$(php /var/www/pterodactyl/artisan p:node:list --format=json 2>/dev/null)
     if [ $? -ne 0 ] || [ -z "$result" ]; then
-        echo "1"
-        return
+        G_NODE_ID="1"
+        return 0
     fi
     local latest_node_id
     latest_node_id=$(echo "$result" | jq '.[-1].id')
     if [ -n "$latest_node_id" ]; then
-        echo "$latest_node_id"
+        G_NODE_ID="$latest_node_id"
     else
-        echo "1"
+        G_NODE_ID="1"
     fi
+    return 0
 }
 
 generate_install_token() {
     local panel_url=$1
-    local panel_email=$2
-    local panel_password=$3
-    local node_id=$4
+    local node_id=$2
     local config_url="$panel_url/admin/nodes/view/$node_id/configuration"
     local html_content
     html_content=$(curl -s -b "$COOKIES_FILE" "$config_url")
@@ -251,15 +252,16 @@ generate_install_token() {
     if [ -z "$install_token" ]; then
         return 1
     fi
-    echo "$install_token"
+    G_INSTALL_TOKEN="$install_token"
+    return 0
 }
 
 show_wings_install_command() {
     local panel_url=$1
     local install_token=$2
     local node_id=$3
-    echo -e "\n一键导入命令：\n"
-    echo "cd /etc/pterodactyl && sudo wings configure --panel-url $panel_url --token $install_token --node $node_id"
+    echo -e "在wings端一键导入配置的命令："
+    echo "(cd /etc/pterodactyl && sudo wings configure --panel-url "$panel_url" --token "$install_token" --node "$node_id")"
 }
 
 main() {
@@ -295,45 +297,42 @@ main() {
         echo "输入必须是数字，将使用默认值"
         node_over_disk=0
     fi
-    ipv4=$(get_ipv4)
-    if ! create_node "$node_name" "$node_memory" "$node_over_memory" "$node_disk" "$node_over_disk" "$ipv4"; then
+    if ! get_ipv4; then
+        echo "无法获取IPv4地址，脚本中断"
+        exit 1
+    fi
+    if ! create_node "$node_name" "$node_memory" "$node_over_memory" "$node_disk" "$node_over_disk" "$G_IPV4"; then
         echo "节点创建失败，脚本中断"
         exit 1
     fi
     echo "读取面板配置..."
-    panel_config=$(read_panel_config)
-    if [ -z "$panel_config" ]; then
+    if ! read_panel_config; then
         echo "无法获取面板配置，脚本中断"
         exit 1
     fi
-    panel_url=$(echo "$panel_config" | cut -d'|' -f1)
-    admin_email=$(echo "$panel_config" | cut -d'|' -f2)
-    admin_password=$(echo "$panel_config" | cut -d'|' -f3)
-    echo "面板地址: $panel_url"
-    echo "管理员邮箱: $admin_email"
-    echo "管理员密码: ${admin_password:0:3}****"
-    csrf_token=$(login_panel "$panel_url" "$admin_email" "$admin_password")
-    if [ $? -ne 0 ] || [ -z "$csrf_token" ]; then
+    echo "面板地址: $G_PANEL_URL"
+    echo "管理员邮箱: $G_ADMIN_EMAIL"
+    echo "管理员密码: ${G_ADMIN_PASSWORD:0:3}****"
+    if ! login_panel "$G_PANEL_URL" "$G_ADMIN_EMAIL" "$G_ADMIN_PASSWORD"; then
         echo "面板登录失败，脚本中断"
         exit 1
     fi
-    node_id=$(get_latest_node_id)
-    echo "将使用节点ID: $node_id"
-    echo -n "请确认节点ID [默认: $node_id]: "
+    get_latest_node_id
+    echo "将使用节点ID: $G_NODE_ID"
+    echo -n "请确认节点ID [默认: $G_NODE_ID]: "
     read -r input_node_id
     if [ -n "$input_node_id" ]; then
         if [[ "$input_node_id" =~ ^[0-9]+$ ]]; then
-            node_id=$input_node_id
+            G_NODE_ID=$input_node_id
         else
-            echo "输入无效，将使用默认节点ID: $node_id"
+            echo "输入无效，将使用默认节点ID: $G_NODE_ID"
         fi
     fi
-    install_token=$(generate_install_token "$panel_url" "$admin_email" "$admin_password" "$node_id")
-    if [ $? -ne 0 ] || [ -z "$install_token" ]; then
+    if ! generate_install_token "$G_PANEL_URL" "$G_NODE_ID"; then
         echo "安装令牌生成失败，脚本中断"
         exit 1
     fi
-    show_wings_install_command "$panel_url" "$install_token" "$node_id"
+    show_wings_install_command "$G_PANEL_URL" "$G_INSTALL_TOKEN" "$G_NODE_ID"
 }
 
 main

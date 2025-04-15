@@ -240,7 +240,6 @@ RestartSec=5s
 [Install]
 WantedBy=multi-user.target
 EOF
-
     # 启用服务
     systemctl enable --now wings
     systemctl daemon-reload
