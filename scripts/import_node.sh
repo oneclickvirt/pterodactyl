@@ -256,8 +256,14 @@ generate_admin_api_key() {
         echo "创建API密钥请求失败"
         return 1
     fi
+    sleep 3
     local admin_key
-    admin_key=$(echo "$create_api_response" | grep -oP '<td><code>ptla_\K[^<]+')
+    api_page_content=$(curl -s -b "$COOKIES_FILE" "$api_page_url")
+    if [ $? -ne 0 ] || [ -z "$api_page_content" ]; then
+        echo "重新获取API页面失败"
+        return 1
+    fi
+    admin_key=$(echo "$api_page_content" | grep -oP '<td><code>ptla_\K[^<]+(?=</code></td>\s*<td>AdminKey</td>)')
     if [ -z "$admin_key" ]; then
         echo "无法从响应中提取API密钥"
         return 1
