@@ -2,6 +2,10 @@
 
 # 主要变化
 
+2025.04.14
+
+- 测试修复debian上的panel和wings的安装
+
 2025.04.13
 
 - 测试修复ubuntu上的panel和wings的安装
