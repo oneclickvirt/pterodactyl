@@ -174,7 +174,7 @@ def login_panel(panel_url: str, admin_email: str, admin_password: str) -> Option
     """模拟登录面板并返回CSRF Token"""
     print(f"正在登录Pterodactyl面板: {panel_url}")
     try:
-        SEESION.cookies.clear()
+        SESSION.cookies.clear()
         SESSION.get(f"{panel_url}/sanctum/csrf-cookie")
         xsrf_token = SESSION.cookies.get("XSRF-TOKEN")
         if not xsrf_token:
@@ -246,6 +246,7 @@ def generate_install_token(panel_url: str, panel_email: str, panel_password: str
     """为节点生成安装令牌，并确保重新获取 CSRF Token 和 Cookies"""
     print(f"正在为节点ID {node_id} 生成安装令牌...")
     try:
+        SESSION.get(f"{panel_url}/sanctum/csrf-cookie")
         updated_token = SESSION.cookies.get("XSRF-TOKEN")
         csrf_token = urllib.parse.unquote(updated_token)
         headers = {
