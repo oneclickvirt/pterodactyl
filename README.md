@@ -13,11 +13,13 @@
 
 ## 更新
 
-2025.04.14
+2025.04.15
 
-- 测试修复debian上的panel和wings的安装
+- 测试修复节点导入
 
 ## Panel
+
+panel端执行：
 
 ```shell
 curl -slk https://raw.githubusercontent.com/oneclickvirt/pterodactyl/main/scripts/install_pterodactyl.sh -o install_pterodactyl.sh && chmod 777 install_pterodactyl.sh && bash install_pterodactyl.sh
@@ -25,16 +27,26 @@ curl -slk https://raw.githubusercontent.com/oneclickvirt/pterodactyl/main/script
 
 ## Wings
 
+wings端执行：
+
 ```shell
 curl -slk https://raw.githubusercontent.com/oneclickvirt/pterodactyl/main/scripts/install_wings.sh -o install_wings.sh && chmod 777 install_wings.sh && bash install_wings.sh
 ```
 
 ## Import
 
-测试中，不要使用
+panel端执行：
 
-```
+```shell
 curl -slk https://raw.githubusercontent.com/oneclickvirt/pterodactyl/main/scripts/import_node.py -o import_node.py && chmod 777 import_node.py && python3 import_node.py
+```
+
+会生成需要在wings端执行的命令
+
+生成的命令执行完毕后，wings端再执行：
+
+```shell
+bash install_wings.sh
 ```
 
 ## Thanks
