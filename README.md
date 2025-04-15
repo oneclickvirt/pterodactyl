@@ -34,7 +34,7 @@ curl -slk https://raw.githubusercontent.com/oneclickvirt/pterodactyl/main/script
 测试中，不要使用
 
 ```
-curl -slk https://raw.githubusercontent.com/oneclickvirt/pterodactyl/main/scripts/import_node.sh -o import_node.sh && chmod 777 import_node.sh && bash import_node.sh
+curl -slk https://raw.githubusercontent.com/oneclickvirt/pterodactyl/main/scripts/import_node.py -o import_node.py && chmod 777 import_node.py && python3 import_node.py
 ```
 
 ## Thanks
