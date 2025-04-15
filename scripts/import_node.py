@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # https://github.com/oneclickvirt/pterodactyl
-# 2025.04.14
+# 2025.04.15
 
 import os
 import sys
@@ -173,26 +173,20 @@ def create_node(node_name: str, node_memory: int, node_over_memory: int,
 def login_panel(panel_url: str, admin_email: str, admin_password: str) -> Optional[str]:
     """模拟登录面板并返回CSRF Token"""
     print(f"正在登录Pterodactyl面板: {panel_url}")
-    
     try:
-        # 获取CSRF Cookie
+        SEESION.cookies.clear()
         SESSION.get(f"{panel_url}/sanctum/csrf-cookie")
-        # 获取XSRF-TOKEN并解码
         xsrf_token = SESSION.cookies.get("XSRF-TOKEN")
         if not xsrf_token:
             print("获取不到XSRF-TOKEN")
             return None
-        
         xsrf_token = urllib.parse.unquote(xsrf_token)
         print(f"解码后的XSRF-TOKEN: {xsrf_token}")
-        
-        # 执行登录
         login_data = {
             "user": admin_email,
             "password": admin_password,
             "g-recaptcha-response": ""
         }
-        
         headers = {
             "Content-Type": "application/json",
             "X-XSRF-TOKEN": xsrf_token,
@@ -200,30 +194,21 @@ def login_panel(panel_url: str, admin_email: str, admin_password: str) -> Option
             "X-Requested-With": "XMLHttpRequest",
             "Accept": "application/json"
         }
-        
         login_response = SESSION.post(
             f"{panel_url}/auth/login", 
             json=login_data, 
             headers=headers
         )
-        
-        # 检查状态码
         admin_check_status = SESSION.get(f"{panel_url}/admin").status_code
         print(f"{panel_url}/admin 登录响应状态码：{admin_check_status}")
-        
-        # 检查响应内容
         login_json = login_response.json()
         print(f"登录响应文本：{login_response.text[:200]}")
-        
         if not login_json.get("data", {}).get("complete", False):
             print("错误：面板登录失败，请检查用户名和密码是否正确！")
             return None
-        
-        # 登录成功，获取更新后的Token
         updated_token = SESSION.cookies.get("XSRF-TOKEN")
         updated_xsrf_token = urllib.parse.unquote(updated_token)
         print(f"登录成功，获取到CSRF Token: {updated_xsrf_token}")
-        
         return updated_xsrf_token
     except Exception as e:
         print(f"登录面板时出错: {e}")
@@ -261,23 +246,25 @@ def generate_install_token(panel_url: str, panel_email: str, panel_password: str
     """为节点生成安装令牌，并确保重新获取 CSRF Token 和 Cookies"""
     print(f"正在为节点ID {node_id} 生成安装令牌...")
     try:
-        # 登录面板并获取最新的 CSRF Token 和 Cookies
-        csrf_token = login_panel(panel_url, panel_email, panel_password)
-        if not csrf_token:
-            print("获取 CSRF Token 失败，无法继续生成安装令牌")
-            return None
+        updated_token = SESSION.cookies.get("XSRF-TOKEN")
+        csrf_token = urllib.parse.unquote(updated_token)
         headers = {
             "X-CSRF-TOKEN": csrf_token,
             "Accept": "*/*",
             "X-Requested-With": "XMLHttpRequest",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
             "Origin": panel_url,
             "Referer": f"{panel_url}/admin/nodes/view/{node_id}/configuration",
             "Content-Length": "0"
         }
-        # 使用 SESSION 发送请求，保持会话一致，并携带 Cookies
-        token_response = SESSION.post(f"{panel_url}/admin/nodes/view/{node_id}/settings/token", headers=headers, cookies=SESSION.cookies.get_dict())
-        # 处理响应
+        token_url = f"{panel_url}/admin/nodes/view/{node_id}/settings/token"
+        print(f"请求URL: {token_url}")
+        print(f"使用Cookie: {SESSION.cookies.get_dict()}")
+        token_response = SESSION.post(token_url, headers=headers)
+        if token_response.status_code != 200:
+            print(f"错误：请求失败，状态码: {token_response.status_code}")
+            print(f"响应内容: {token_response.text}")
+            return None
         token_json = token_response.json()
         install_token = token_json.get("token")
         if not install_token:
