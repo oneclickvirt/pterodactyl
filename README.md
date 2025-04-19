@@ -1,5 +1,7 @@
 # Pterodactyl
 
+[![hits](https://hits.spiritlhl.net/pterodactyl.svg?action=hit&title=hits&title_bg=%23555555&count_bg=%233aebee&edge_flat=false)](https://hits.spiritlhl.net)
+
 进一步调研发现开设servers和绑定用户极麻烦，不如原生直接docker方便，故而暂不做后续开发了
 
 ## 说明
