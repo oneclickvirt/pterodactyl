@@ -10,4 +10,10 @@
 
 ## 说明
 
+中文：
+
 https://www.spiritlhl.net/incomplete/pterodactyl.html
+
+English: 
+
+https://www.spiritlhl.net/en/incomplete/pterodactyl.html
