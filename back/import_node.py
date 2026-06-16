@@ -7,23 +7,38 @@ import os
 import sys
 import json
 import time
-import socket
 import subprocess
 import urllib.parse
 import requests
 import ipaddress
 import re
-from getpass import getpass
-from typing import Dict, Tuple, Optional, List, Any, Union
+import shutil
+import shlex
+from typing import Tuple, Optional
 
 PANEL_DIR = "/var/www/pterodactyl"
 USER_FILE = f"{PANEL_DIR}/auto_users.txt"
-COOKIES_FILE = "/tmp/pterodactyl_cookies.txt"
 SESSION = requests.Session()
+try:
+    REQUEST_TIMEOUT = int(os.environ.get("REQUEST_TIMEOUT", "30"))
+except ValueError:
+    REQUEST_TIMEOUT = 30
+
+def session_get(url: str, **kwargs: object) -> requests.Response:
+    kwargs.setdefault("timeout", REQUEST_TIMEOUT)
+    return SESSION.get(url, **kwargs)
+
+def session_post(url: str, **kwargs: object) -> requests.Response:
+    kwargs.setdefault("timeout", REQUEST_TIMEOUT)
+    return SESSION.post(url, **kwargs)
 
 def check_root() -> None:
     if os.geteuid() != 0:
-        print("错误：脚本必须以root权限运行！")
+        sudo_path = shutil.which("sudo")
+        if sudo_path:
+            print("正在使用 sudo 重新执行 / Re-running with sudo")
+            os.execv(sudo_path, ["sudo", "-E", sys.executable, *sys.argv])
+        print("错误：脚本必须以root权限运行，或由具备 sudo 权限的用户运行！/ Error: root or sudo is required.")
         sys.exit(1)
 
 def is_private_ipv4(ip_address: str) -> bool:
@@ -45,7 +60,13 @@ def is_private_ipv4(ip_address: str) -> bool:
 
 def get_ipv4() -> str:
     try:
-        output = subprocess.check_output("ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1", shell=True).decode("utf-8").strip()
+        ip_output = subprocess.check_output(["ip", "-4", "addr", "show"], text=True)
+        output = ""
+        for line in ip_output.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("inet ") and " scope global " in stripped:
+                output = stripped.split()[1].split("/", 1)[0]
+                break
         if output and not is_private_ipv4(output):
             print(f"检测到公网IPv4地址: {output}")
             return output
@@ -92,7 +113,9 @@ def read_panel_config() -> Tuple[str, str, str]:
             lines = f.readlines()
             for line in lines:
                 if "登录页面" in line:
-                    panel_url = line.split(":")[2].replace("//", "")
+                    match = re.search(r'https?://\S+', line)
+                    if match:
+                        panel_url = match.group(0)
                 elif "用户名" in line:
                     admin_email = line.split(':', 1)[1].strip()
                 elif "密码" in line:
@@ -107,6 +130,17 @@ def read_panel_config() -> Tuple[str, str, str]:
         panel_url = "http://" + panel_url
     panel_url = panel_url.rstrip('/')
     return panel_url, admin_email, admin_password
+
+def extract_meta_token(html_content: str) -> Optional[str]:
+    patterns = [
+        r'<meta[^>]*name=["\']_token["\'][^>]*content=["\']([^"\']+)["\']',
+        r'<meta[^>]*content=["\']([^"\']+)["\'][^>]*name=["\']_token["\']',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, html_content, re.IGNORECASE)
+        if match:
+            return match.group(1)
+    return None
 
 def create_node(node_name: str, node_memory: int, node_over_memory: int, 
                 node_disk: int, node_over_disk: int, ipv4: str) -> bool:
@@ -150,13 +184,13 @@ def login_panel(panel_url: str, admin_email: str, admin_password: str) -> Option
     print(f"正在登录Pterodactyl面板: {panel_url}")
     try:
         SESSION.cookies.clear()
-        SESSION.get(f"{panel_url}/sanctum/csrf-cookie")
+        session_get(f"{panel_url}/sanctum/csrf-cookie")
         xsrf_token = SESSION.cookies.get("XSRF-TOKEN")
         if not xsrf_token:
             print("获取不到XSRF-TOKEN")
             return None
         xsrf_token = urllib.parse.unquote(xsrf_token)
-        print(f"解码后的XSRF-TOKEN: {xsrf_token}")
+        print("已获取 XSRF-TOKEN / XSRF token acquired")
         login_data = {
             "user": admin_email,
             "password": admin_password,
@@ -169,21 +203,21 @@ def login_panel(panel_url: str, admin_email: str, admin_password: str) -> Option
             "X-Requested-With": "XMLHttpRequest",
             "Accept": "application/json"
         }
-        login_response = SESSION.post(
+        login_response = session_post(
             f"{panel_url}/auth/login", 
             json=login_data, 
             headers=headers
         )
-        admin_check_status = SESSION.get(f"{panel_url}/admin").status_code
+        admin_check_status = session_get(f"{panel_url}/admin").status_code
         print(f"{panel_url}/admin 登录响应状态码：{admin_check_status}")
         login_json = login_response.json()
         print(f"登录响应文本：{login_response.text[:200]}")
-        if not login_json.get("data", {}).get("complete", False):
+        if not (login_json.get("data", {}).get("complete", False) or login_json.get("complete", False)):
             print("错误：面板登录失败，请检查用户名和密码是否正确！")
             return None
         updated_token = SESSION.cookies.get("XSRF-TOKEN")
         updated_xsrf_token = urllib.parse.unquote(updated_token)
-        print(f"登录成功，获取到CSRF Token: {updated_xsrf_token}")
+        print("登录成功，CSRF Token 已更新 / Login succeeded and CSRF token was refreshed")
         return updated_xsrf_token
     except Exception as e:
         print(f"登录面板时出错: {e}")
@@ -192,8 +226,11 @@ def login_panel(panel_url: str, admin_email: str, admin_password: str) -> Option
 def get_latest_node_id() -> int:
     print("获取最新创建的节点ID...")
     try:
-        php_command = "php /var/www/pterodactyl/artisan p:node:list --format=json"
-        result = subprocess.run(php_command, shell=True, capture_output=True, text=True)
+        result = subprocess.run(
+            ["php", "/var/www/pterodactyl/artisan", "p:node:list", "--format=json"],
+            capture_output=True,
+            text=True,
+        )
         if result.returncode != 0:
             print(f"执行 PHP 命令时出错: {result.stderr}")
             return 1
@@ -215,17 +252,16 @@ def generate_install_token(panel_url: str, panel_email: str, panel_password: str
     try:
         config_url = f"{panel_url}/admin/nodes/view/{node_id}/configuration"
         print(f"获取配置页面: {config_url}")
-        response = SESSION.get(config_url)
+        response = session_get(config_url)
         if response.status_code != 200:
             print(f"获取配置页面失败，状态码: {response.status_code}")
             return None
         html_content = response.text
-        csrf_token_match = re.search(r'<meta name="_token" content="([^"]+)"', html_content)
-        if not csrf_token_match:
+        csrf_token = extract_meta_token(html_content)
+        if not csrf_token:
             print("无法从页面中解析CSRF Token")
             return None
-        csrf_token = csrf_token_match.group(1)
-        print(f"从HTML中解析到的CSRF Token: {csrf_token}")
+        print("已从配置页面获取 CSRF Token / CSRF token acquired from configuration page")
         headers = {
             "X-CSRF-TOKEN": csrf_token,
             "Accept": "*/*",
@@ -237,8 +273,8 @@ def generate_install_token(panel_url: str, panel_email: str, panel_password: str
         }
         token_url = f"{panel_url}/admin/nodes/view/{node_id}/settings/token"
         print(f"请求生成令牌URL: {token_url}")
-        print(f"使用Cookie: {SESSION.cookies.get_dict()}")
-        token_response = SESSION.post(token_url, headers=headers)
+        print("使用当前会话 Cookie 请求令牌 / Requesting token with current session cookies")
+        token_response = session_post(token_url, headers=headers)
         if token_response.status_code != 200:
             print(f"错误：请求失败，状态码: {token_response.status_code}")
             print(f"响应内容: {token_response.text}")
@@ -255,23 +291,42 @@ def generate_install_token(panel_url: str, panel_email: str, panel_password: str
         return None
 
 def show_wings_install_command(panel_url: str, install_token: str, node_id: int) -> None:
-    print("在wings端一键导入配置的命令：")
-    print(f"(cd /etc/pterodactyl && sudo wings configure --panel-url {panel_url} --token {install_token} --node {node_id})")
+    command = (
+        f"(cd /etc/pterodactyl && sudo wings configure "
+        f"--panel-url {shlex.quote(panel_url)} "
+        f"--token {shlex.quote(install_token)} "
+        f"--node {int(node_id)})"
+    )
+    print("在 Wings 端一键导入配置的命令 / Command to import config on the Wings host:")
+    print(command)
+    with open("wings_cmd.txt", "w", encoding="utf-8") as file:
+        file.write(command + "\n")
+    os.chmod("wings_cmd.txt", 0o600)
+
+def read_default(prompt: str, default: str, env_name: str) -> str:
+    env_value = os.environ.get(env_name)
+    if env_value:
+        return env_value
+    if sys.stdin.isatty():
+        return input(prompt).strip() or default
+    print(f"非交互环境，使用默认值: {default} / Non-interactive mode uses default: {default}")
+    return default
+
+def read_int_default(prompt: str, default: int, env_name: str) -> int:
+    value = read_default(prompt, str(default), env_name)
+    try:
+        return int(value)
+    except ValueError:
+        print(f"输入必须是数字，将使用默认值 {default} / Number required, using default {default}")
+        return default
 
 def main() -> None:
     check_root()
-    node_name = input("请输入节点名称 [默认: auto-node]: ").strip() or "auto-node"
-    try:
-        node_memory = int(input("请输入节点内存 (MB) [默认: 1024]: ").strip() or "1024")
-        node_over_memory = int(input("请输入内存超分配百分比 [默认: 0]: ").strip() or "0")
-        node_disk = int(input("请输入节点磁盘 (MB) [默认: 10240]: ").strip() or "10240")
-        node_over_disk = int(input("请输入磁盘超分配百分比 [默认: 0]: ").strip() or "0")
-    except ValueError:
-        print("输入必须是数字，将使用默认值")
-        node_memory = 1024
-        node_over_memory = 0
-        node_disk = 10240
-        node_over_disk = 0
+    node_name = read_default("请输入节点名称 / Node name [默认/default: auto-node]: ", "auto-node", "NODE_NAME")
+    node_memory = read_int_default("请输入节点内存 (MB) / Node memory [默认/default: 1024]: ", 1024, "NODE_MEMORY")
+    node_over_memory = read_int_default("请输入内存超分配百分比 / Memory overallocation percent [默认/default: 0]: ", 0, "NODE_OVER_MEMORY")
+    node_disk = read_int_default("请输入节点磁盘 (MB) / Node disk [默认/default: 10240]: ", 10240, "NODE_DISK")
+    node_over_disk = read_int_default("请输入磁盘超分配百分比 / Disk overallocation percent [默认/default: 0]: ", 0, "NODE_OVER_DISK")
     ipv4 = get_ipv4()
     if not create_node(node_name, node_memory, node_over_memory, node_disk, node_over_disk, ipv4):
         print("节点创建失败，脚本中断")
@@ -285,12 +340,7 @@ def main() -> None:
         sys.exit(1)
     node_id = get_latest_node_id()
     print(f"将使用节点ID: {node_id}")
-    try:
-        input_node_id = input(f"请确认节点ID [默认: {node_id}]: ").strip()
-        if input_node_id:
-            node_id = int(input_node_id)
-    except ValueError:
-        print(f"输入无效，将使用默认节点ID: {node_id}")
+    node_id = read_int_default(f"请确认节点ID / Confirm node ID [默认/default: {node_id}]: ", node_id, "NODE_ID")
     install_token = generate_install_token(panel_url, admin_email, admin_password, node_id)
     if not install_token:
         print("安装令牌生成失败，脚本中断")

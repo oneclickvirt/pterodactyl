@@ -6,24 +6,21 @@
 #######################
 # 1. 全局变量与辅助函数
 #######################
-cd /root >/dev/null 2>&1
+cd /root >/dev/null 2>&1 || cd /tmp || exit 1
 export DEBIAN_FRONTEND=noninteractive
 temp_file_apt_fix="/tmp/apt_fix.txt"
 
 # 定义颜色输出函数
-_red() { echo -e "\033[31m\033[01m$@\033[0m"; }
-_green() { echo -e "\033[32m\033[01m$@\033[0m"; }
-_yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
-_blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
+_red() { printf '\033[31m\033[01m%s\033[0m\n' "$*"; }
+_green() { printf '\033[32m\033[01m%s\033[0m\n' "$*"; }
+_yellow() { printf '\033[33m\033[01m%s\033[0m\n' "$*"; }
+_blue() { printf '\033[36m\033[01m%s\033[0m\n' "$*"; }
 reading() { read -rp "$(_green "$1")" "$2"; }
 
 # 系统识别变量
 REGEX=("debian" "ubuntu" "centos|red hat|kernel|oracle linux|alma|rocky" "'amazon linux'" "fedora" "arch")
 RELEASE=("Debian" "Ubuntu" "CentOS" "CentOS" "Fedora" "Arch")
 PACKAGE_UPDATE=("! apt-get update && apt-get --fix-broken install -y && apt-get update" "apt-get update" "yum -y update" "yum -y update" "yum -y update" "pacman -Sy")
-PACKAGE_INSTALL=("apt-get -y install" "apt-get -y install" "yum -y install" "yum -y install" "yum -y install" "pacman -Sy --noconfirm --needed")
-PACKAGE_REMOVE=("apt-get -y remove" "apt-get -y remove" "yum -y remove" "yum -y remove" "yum -y remove" "pacman -Rsc --noconfirm")
-PACKAGE_UNINSTALL=("apt-get -y autoremove" "apt-get -y autoremove" "yum -y autoremove" "yum -y autoremove" "yum -y autoremove" "")
 CMD=("$(grep -i pretty_name /etc/os-release 2>/dev/null | cut -d \" -f2)" "$(hostnamectl 2>/dev/null | grep -i system | cut -d : -f2)" "$(lsb_release -sd 2>/dev/null)" "$(grep -i description /etc/lsb-release 2>/dev/null | cut -d \" -f2)" "$(grep . /etc/redhat-release 2>/dev/null)" "$(grep . /etc/issue 2>/dev/null | cut -d \\ -f1 | sed '/^[ ]*$/d')" "$(grep -i pretty_name /etc/os-release 2>/dev/null | cut -d \" -f2)")
 
 #######################
@@ -31,7 +28,11 @@ CMD=("$(grep -i pretty_name /etc/os-release 2>/dev/null | cut -d \" -f2)" "$(hos
 #######################
 check_root() {
     if [ "$(id -u)" != "0" ]; then
-        _red "此脚本必须以 root 身份运行" 1>&2
+        if command -v sudo >/dev/null 2>&1; then
+            _yellow "Re-running with sudo. / 正在使用 sudo 重新执行。"
+            exec sudo -E bash "$0" "$@"
+        fi
+        _red "此脚本必须以 root 身份运行，或由具备 sudo 权限的用户运行 / This script requires root or sudo." 1>&2
         exit 1
     fi
 }
@@ -59,8 +60,8 @@ detect_system() {
     done
 
     # 检查是否是支持的系统
-    if [[ "${RELEASE[int]}" != "Debian" && "${RELEASE[int]}" != "Ubuntu" && "${RELEASE[int]}" != "CentOS" ]]; then
-        _red "不支持的操作系统: ${RELEASE[int]}"
+    if [[ "${SYSTEM:-}" != "Debian" && "${SYSTEM:-}" != "Ubuntu" && "${SYSTEM:-}" != "CentOS" ]]; then
+        _red "Unsupported OS for the Wings installer: ${SYSTEM:-$SYS}. Supported: Debian, Ubuntu, CentOS. / Wings 安装脚本不支持当前系统：${SYSTEM:-$SYS}。支持：Debian、Ubuntu、CentOS。"
         exit 1
     fi
 }
@@ -133,7 +134,6 @@ check_ipv4() {
             response=$(curl -s4m8 "$p")
             sleep 1
             if [ $? -eq 0 ] && ! echo "$response" | grep -q "error"; then
-                IP_API="$p"
                 IPV4="$response"
                 break
             fi
@@ -150,7 +150,12 @@ check_china() {
     if [[ -z "${CN}" ]]; then
         if [[ $(curl -m 6 -s https://ipapi.co/json | grep 'China') != "" ]]; then
             _yellow "根据ipapi.co提供的信息，当前IP可能在中国"
-            read -e -r -p "是否选用中国镜像完成相关组件安装? ([y]/n) " input
+            if [ -t 0 ]; then
+                read -e -r -p "是否选用中国镜像完成相关组件安装? ([y]/n) " input
+            else
+                input="${USE_CHINA_MIRROR:-n}"
+                _yellow "非交互环境，使用 USE_CHINA_MIRROR=${input} / Non-interactive mode uses USE_CHINA_MIRROR=${input}"
+            fi
             case $input in
             [yY][eE][sS] | [yY])
                 echo "使用中国镜像"
@@ -210,7 +215,7 @@ configure_system() {
 #######################
 install_pterodactyl_wings() {
     # 下载Wings二进制文件
-    curl -L -o /usr/local/bin/wings "https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_$([[ "$(uname -m)" == "x86_64" ]] && echo "amd64" || echo "arm64")"
+    curl -fL --retry 3 --connect-timeout 15 --max-time 180 -o /usr/local/bin/wings "https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_$([[ "$(uname -m)" == "x86_64" ]] && echo "amd64" || echo "arm64")"
     chmod u+x /usr/local/bin/wings
 }
 
@@ -241,33 +246,65 @@ RestartSec=5s
 WantedBy=multi-user.target
 EOF
     # 启用服务
-    systemctl enable --now wings
     systemctl daemon-reload
+    systemctl enable --now wings
+    verify_wings_health
+}
+
+verify_wings_health() {
+    _yellow "检查Wings健康状态 / Checking Wings health"
+    for _ in {1..12}; do
+        if systemctl is-active --quiet wings; then
+            break
+        fi
+        sleep 5
+    done
+    systemctl is-active --quiet wings
+    if command -v ss >/dev/null 2>&1; then
+        for _ in {1..12}; do
+            if ss -ltn | awk '{print $4}' | grep -Eq ':8080$' && ss -ltn | awk '{print $4}' | grep -Eq ':2022$'; then
+                _green "Wings健康检查通过 / Wings health check passed"
+                return 0
+            fi
+            sleep 5
+        done
+        _red "Wings 未监听 8080/2022 端口，请检查 / Wings is not listening on 8080/2022; please check logs."
+        systemctl status wings --no-pager || true
+        return 1
+    else
+        _yellow "缺少 ss 命令，跳过端口检查 / ss command not found, skipping port check."
+    fi
+    _green "Wings健康检查通过 / Wings health check passed"
 }
 
 #######################
 # 9. 主函数
 #######################
 main() {
-    check_root
+    check_root "$@"
     setup_locale
     detect_system
     check_update
     check_ipv4
     create_directories
-    # 检查是否已安装
-    if [ ! -f "/etc/pterodactyl/config.yml" ]; then
-        if [ ! -f "/usr/local/bin/reboot_pterodactyl.txt" ]; then
-            check_china
-            install_docker_and_compose
-            configure_system
-        fi
+    if [ ! -f "/etc/pterodactyl/config.yml" ] && [ ! -f "/usr/local/bin/reboot_pterodactyl.txt" ]; then
+        check_china
+        install_docker_and_compose
+        configure_system
+    fi
+
+    if [ ! -x "/usr/local/bin/wings" ]; then
         install_pterodactyl_wings
-    else
+    fi
+
+    if [ -f "/etc/pterodactyl/config.yml" ]; then
         configure_wings_service
+    else
+        _yellow "Wings binary installed, but /etc/pterodactyl/config.yml is missing. Run the generated wings configure command, then rerun this script for service and port checks."
+        _yellow "Wings 二进制已安装，但缺少 /etc/pterodactyl/config.yml。请先执行导入脚本生成的 wings configure 命令，然后再次运行本脚本完成服务和端口检查。"
     fi
     _green "Pterodactyl Wings 安装/配置已完成!"
 }
 
 # 执行主函数
-main
+main "$@"

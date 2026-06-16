@@ -5,22 +5,97 @@
 myvar=$(pwd)
 PANEL_DIR="/var/www/pterodactyl"
 USER_FILE="$PANEL_DIR/auto_users.txt"
-COOKIES_FILE="/tmp/pterodactyl_cookies.txt"
+COOKIES_FILE=""
+CURL_CONNECT_TIMEOUT="${CURL_CONNECT_TIMEOUT:-8}"
+CURL_MAX_TIME="${CURL_MAX_TIME:-30}"
+umask 077
 
 # 全局变量，用于存储函数返回值
 G_IPV4=""
 G_PANEL_URL=""
 G_ADMIN_EMAIL=""
 G_ADMIN_PASSWORD=""
-G_CSRF_TOKEN=""
 G_NODE_ID=""
 G_INSTALL_TOKEN=""
 G_ADMIN_KEY=""
 
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
-        echo "错误：脚本必须以root权限运行！"
+        if command -v sudo >/dev/null 2>&1; then
+            echo "正在使用 sudo 重新执行 / Re-running with sudo"
+            exec sudo -E bash "$0" "$@"
+        fi
+        echo "错误：脚本必须以root权限运行，或由具备 sudo 权限的用户运行！/ Error: root or sudo is required."
         exit 1
+    fi
+}
+
+curl_request() {
+    curl -sS --fail --connect-timeout "$CURL_CONNECT_TIMEOUT" --max-time "$CURL_MAX_TIME" "$@"
+}
+
+cleanup() {
+    if [ -n "${COOKIES_FILE:-}" ]; then
+        rm -f "$COOKIES_FILE" 2>/dev/null || true
+    fi
+}
+
+init_cookie_file() {
+    COOKIES_FILE="$(mktemp /tmp/pterodactyl_cookies.XXXXXX)"
+    chmod 600 "$COOKIES_FILE"
+    trap cleanup EXIT
+}
+
+url_decode() {
+    local value="$1"
+    printf '%b' "${value//%/\\x}"
+}
+
+extract_meta_token() {
+    local html="$1" token
+    token=$(printf '%s' "$html" | tr '\n' ' ' | sed -n 's/.*<meta[^>]*name="_token"[^>]*content="\([^"]*\)".*/\1/p' | head -n 1)
+    [ -n "$token" ] || token=$(printf '%s' "$html" | tr '\n' ' ' | sed -n "s/.*<meta[^>]*name='_token'[^>]*content='\([^']*\)'.*/\1/p" | head -n 1)
+    [ -n "$token" ] || token=$(printf '%s' "$html" | tr '\n' ' ' | sed -n 's/.*<meta[^>]*content="\([^"]*\)"[^>]*name="_token".*/\1/p' | head -n 1)
+    [ -n "$token" ] || token=$(printf '%s' "$html" | tr '\n' ' ' | sed -n "s/.*<meta[^>]*content='\([^']*\)'[^>]*name='_token'.*/\1/p" | head -n 1)
+    printf '%s' "$token"
+}
+
+extract_admin_key() {
+    local html="$1" compact key
+    compact=$(printf '%s' "$html" | tr '\n' ' ')
+    key=$(printf '%s' "$compact" | sed -n 's#.*<td[^>]*>[[:space:]]*<code[^>]*>\(ptla_[^<[:space:]]*\)</code>[[:space:]]*</td>[[:space:]]*<td[^>]*>[[:space:]]*AdminKey[[:space:]]*</td>.*#\1#p' | head -n 1)
+    [ -n "$key" ] || key=$(printf '%s' "$compact" | grep -Eo 'ptla_[A-Za-z0-9._-]+' | head -n 1 || true)
+    printf '%s' "$key"
+}
+
+read_default() {
+    local prompt="$1"
+    local default_value="$2"
+    local env_value="${3:-}"
+    local result=""
+
+    if [ -n "$env_value" ]; then
+        printf '%s' "$env_value"
+        return 0
+    fi
+    if [ -t 0 ]; then
+        echo -n "$prompt"
+        read -r result
+        printf '%s' "${result:-$default_value}"
+        return 0
+    fi
+    echo "非交互环境，使用默认值: $default_value / Non-interactive mode uses default: $default_value" >&2
+    printf '%s' "$default_value"
+}
+
+require_number() {
+    local value="$1"
+    local default_value="$2"
+    if [[ "$value" =~ ^[0-9]+$ ]]; then
+        printf '%s' "$value"
+    else
+        echo "输入必须是数字，将使用默认值 $default_value / Number required, using default $default_value" >&2
+        printf '%s' "$default_value"
     fi
 }
 
@@ -87,7 +162,7 @@ get_ipv4() {
         "https://api.ipify.org"
     )
     for api_url in "${api_list[@]}"; do
-        if ip=$(curl -s --connect-timeout 8 "$api_url"); then
+        if ip=$(curl_request "$api_url"); then
             if [ -n "$ip" ] && ! echo "$ip" | grep -i "error" >/dev/null; then
                 G_IPV4="$ip"
                 return 0
@@ -102,14 +177,12 @@ read_panel_config() {
     if [ ! -f "$USER_FILE" ]; then
         return 1
     fi
-    local panel_ip=""
     G_PANEL_URL=""
     G_ADMIN_EMAIL=""
     G_ADMIN_PASSWORD=""
     while IFS= read -r line; do
         if [[ "$line" == *登录页面* ]]; then
-            panel_ip=$(echo "$line" | sed -n 's#.*http://\([^/:]*\).*#\1#p')
-            G_PANEL_URL="http://$panel_ip"
+            G_PANEL_URL=$(echo "$line" | awk '{for (i = 1; i <= NF; i++) if ($i ~ /^https?:\/\//) {print $i; exit}}')
         elif [[ "$line" == *用户名* ]]; then
             G_ADMIN_EMAIL=$(echo "$line" | cut -d':' -f2- | sed 's/^ *//')
         elif [[ "$line" == *密码* ]]; then
@@ -168,20 +241,20 @@ login_panel() {
     local admin_password=$3
     echo "正在登录Pterodactyl面板: $panel_url"
     rm -f "$COOKIES_FILE" 2>/dev/null
-    local csrf_response
-    csrf_response=$(curl -s -c "$COOKIES_FILE" -b "$COOKIES_FILE" "$panel_url/sanctum/csrf-cookie")
+    curl_request -c "$COOKIES_FILE" -b "$COOKIES_FILE" "$panel_url/sanctum/csrf-cookie" >/dev/null
     sleep 1
     local xsrf_token
-    xsrf_token=$(grep -oP 'XSRF-TOKEN\s+\K[^\s]+' "$COOKIES_FILE" | sed 's/%3D/=/g' | sed 's/%3d/=/g')
+    xsrf_token=$(awk '$6 == "XSRF-TOKEN" {print $7}' "$COOKIES_FILE" | tail -n 1 | sed 's/%3D/=/g' | sed 's/%3d/=/g')
     if [ -z "$xsrf_token" ]; then
         echo "获取不到XSRF-TOKEN"
         return 1
     fi
-    xsrf_token=$(echo "$xsrf_token" | sed -e 's/%\([0-9A-F][0-9A-F]\)/\\\\\\x\1/g' | xargs -0 printf "%b")
-    echo "解码后的XSRF-TOKEN: $xsrf_token"
-    local login_data="{\"user\":\"$admin_email\",\"password\":\"$admin_password\",\"g-recaptcha-response\":\"\"}"
+    xsrf_token=$(url_decode "$xsrf_token")
+    echo "已获取 XSRF-TOKEN / XSRF token acquired"
+    local login_data
+    login_data=$(jq -nc --arg user "$admin_email" --arg password "$admin_password" '{"user":$user,"password":$password,"g-recaptcha-response":""}')
     local login_response
-    login_response=$(curl -s -c "$COOKIES_FILE" -b "$COOKIES_FILE" \
+    login_response=$(curl_request -c "$COOKIES_FILE" -b "$COOKIES_FILE" \
         -H "Content-Type: application/json" \
         -H "X-XSRF-TOKEN: $xsrf_token" \
         -H "Referer: $panel_url/auth/login" \
@@ -191,19 +264,18 @@ login_panel() {
         "$panel_url/auth/login")
     local admin_check_status
     sleep 1
-    admin_check_status=$(curl -s -o /dev/null -w "%{http_code}" -c "$COOKIES_FILE" -b "$COOKIES_FILE" "$panel_url/admin")
+    admin_check_status=$(curl -sS --connect-timeout "$CURL_CONNECT_TIMEOUT" --max-time "$CURL_MAX_TIME" -o /dev/null -w "%{http_code}" -c "$COOKIES_FILE" -b "$COOKIES_FILE" "$panel_url/admin")
     sleep 1
     echo "$panel_url/admin 登录响应状态码：$admin_check_status"
     echo "登录响应文本：${login_response:0:200}"
-    if ! echo "$login_response" | grep -q '"complete":true'; then
+    if ! echo "$login_response" | jq -e '(.data.complete == true) or (.complete == true)' >/dev/null 2>&1; then
         echo "错误：面板登录失败，请检查用户名和密码是否正确！"
         return 1
     fi
     local updated_token
-    updated_token=$(grep -oP 'XSRF-TOKEN\s+\K[^\s]+' "$COOKIES_FILE" | sed 's/%3D/=/g' | sed 's/%3d/=/g')
-    updated_token=$(echo "$updated_token" | sed -e 's/%\([0-9A-F][0-9A-F]\)/\\\\\\x\1/g' | xargs -0 printf "%b")
-    echo "登录成功，获取到CSRF Token: $updated_token"
-    G_CSRF_TOKEN="$updated_token"
+    updated_token=$(awk '$6 == "XSRF-TOKEN" {print $7}' "$COOKIES_FILE" | tail -n 1 | sed 's/%3D/=/g' | sed 's/%3d/=/g')
+    updated_token=$(url_decode "$updated_token")
+    echo "登录成功，CSRF Token 已更新 / Login succeeded and CSRF token was refreshed"
     return 0
 }
 
@@ -215,7 +287,7 @@ get_latest_node_id() {
         return 0
     fi
     local latest_node_id
-    latest_node_id=$(echo "$result" | jq '.[-1].id')
+    latest_node_id=$(echo "$result" | jq -er 'if type == "array" and length > 0 and .[-1].id then .[-1].id else empty end' 2>/dev/null || true)
     if [ -n "$latest_node_id" ]; then
         G_NODE_ID="$latest_node_id"
     else
@@ -228,32 +300,41 @@ generate_admin_api_key() {
     local panel_url=$1
     local api_page_url="$panel_url/admin/api"
     local key_file="AdminKey.txt"
+    local admin_key
     echo "正在获取 API 页面..."
     sleep 1
     local api_page_content
-    api_page_content=$(curl -s -b "$COOKIES_FILE" "$api_page_url")
+    if [ -s "$key_file" ]; then
+        admin_key=$(grep -E '^ptla_' "$key_file" | head -n 1 || true)
+        if [ -n "$admin_key" ]; then
+            echo "发现本地 AdminKey 文件，直接使用。/ Found local AdminKey file."
+            G_ADMIN_KEY="$admin_key"
+            return 0
+        fi
+    fi
+    api_page_content=$(curl_request -b "$COOKIES_FILE" "$api_page_url")
     if [ $? -ne 0 ] || [ -z "$api_page_content" ]; then
         echo "获取 API 页面失败"
         return 1
     fi
-    local admin_key
-    admin_key=$(echo "$api_page_content" | tr -d '\n' | grep -oP '<td><code>(ptla_[^<]+)</code></td>\s*<td>AdminKey</td>' | grep -oP 'ptla_[^<]+')
+    admin_key=$(extract_admin_key "$api_page_content")
     if [ -n "$admin_key" ]; then
         echo "发现已有 AdminKey，直接使用该密钥。"
         G_ADMIN_KEY="$admin_key"
         echo "$G_ADMIN_KEY" > "$key_file"
+        chmod 600 "$key_file"
         return 0
     fi
     echo "未找到现有密钥，尝试创建新的 API 密钥..."
     local api_csrf_token
-    api_csrf_token=$(echo "$api_page_content" | grep -oP '<meta name="_token" content="\K[^"]+')
+    api_csrf_token=$(extract_meta_token "$api_page_content")
     if [ -z "$api_csrf_token" ]; then
         echo "无法获取 API 页面中的 CSRF 令牌"
         return 1
     fi
-    echo "获取到 CSRF 令牌: $api_csrf_token"
+    echo "已获取 API 页面 CSRF 令牌 / API page CSRF token acquired"
     sleep 1
-    curl -s -b "$COOKIES_FILE" \
+    curl_request -b "$COOKIES_FILE" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -H "Origin: $panel_url" \
         -H "Referer: $panel_url/admin/api/new" \
@@ -261,12 +342,12 @@ generate_admin_api_key() {
         --data-raw "r_allocations=3&r_database_hosts=3&r_eggs=3&r_locations=3&r_nests=3&r_nodes=3&r_server_databases=3&r_servers=3&r_users=3&memo=AdminKey&_token=$api_csrf_token" \
         "$panel_url/admin/api/new" > /dev/null
     sleep 3
-    api_page_content=$(curl -s -b "$COOKIES_FILE" "$api_page_url")
+    api_page_content=$(curl_request -b "$COOKIES_FILE" "$api_page_url")
     if [ $? -ne 0 ] || [ -z "$api_page_content" ]; then
         echo "重新获取 API 页面失败"
         return 1
     fi
-    admin_key=$(echo "$api_page_content" | tr -d '\n' | grep -oP '<td><code>(ptla_[^<]+)</code></td>\s*<td>AdminKey</td>' | grep -oP 'ptla_[^<]+')
+    admin_key=$(extract_admin_key "$api_page_content")
     if [ -z "$admin_key" ]; then
         echo "无法从响应中提取 API 密钥"
         return 1
@@ -274,6 +355,7 @@ generate_admin_api_key() {
     G_ADMIN_KEY="$admin_key"
     echo "成功创建 API 密钥: $G_ADMIN_KEY"
     echo "$G_ADMIN_KEY" > "$key_file"
+    chmod 600 "$key_file"
     return 0
 }
 
@@ -283,19 +365,19 @@ generate_install_token() {
     local config_url="$panel_url/admin/nodes/view/$node_id/configuration"
     local html_content
     sleep 1
-    html_content=$(curl -s -b "$COOKIES_FILE" "$config_url")
+    html_content=$(curl_request -b "$COOKIES_FILE" "$config_url")
     if [ $? -ne 0 ] || [ -z "$html_content" ]; then
         return 1
     fi
     local csrf_token
-    csrf_token=$(echo "$html_content" | grep -oP '<meta name="_token" content="\K[^"]+')
+    csrf_token=$(extract_meta_token "$html_content")
     if [ -z "$csrf_token" ]; then
         return 1
     fi
     local token_url="$panel_url/admin/nodes/view/$node_id/settings/token"
     local token_response
     sleep 1
-    token_response=$(curl -s -b "$COOKIES_FILE" \
+    token_response=$(curl_request -b "$COOKIES_FILE" \
         -H "X-CSRF-TOKEN: $csrf_token" \
         -H "Accept: */*" \
         -H "X-Requested-With: XMLHttpRequest" \
@@ -308,7 +390,7 @@ generate_install_token() {
         return 1
     fi
     local install_token
-    install_token=$(echo "$token_response" | grep -oP '"token":"\K[^"]+')
+    install_token=$(echo "$token_response" | jq -er '.token // empty' 2>/dev/null || true)
     if [ -z "$install_token" ]; then
         return 1
     fi
@@ -317,49 +399,29 @@ generate_install_token() {
 }
 
 show_wings_install_command() {
-    cd $myvar >/dev/null 2>&1
+    cd "$myvar" >/dev/null 2>&1 || exit 1
     local panel_url=$1
     local install_token=$2
     local node_id=$3
-    local cmd="(cd /etc/pterodactyl && sudo wings configure --panel-url \"$panel_url\" --token \"$install_token\" --node \"$node_id\")"
-    echo -e "在wings端一键导入配置的命令[带英文括号]，同时该命令保存在当前路径下的 wings_cmd.txt 文件中避免遗忘："
+    local quoted_panel quoted_token quoted_node cmd
+    printf -v quoted_panel '%q' "$panel_url"
+    printf -v quoted_token '%q' "$install_token"
+    printf -v quoted_node '%q' "$node_id"
+    cmd="(cd /etc/pterodactyl && sudo wings configure --panel-url $quoted_panel --token $quoted_token --node $quoted_node)"
+    echo "在 Wings 端一键导入配置的命令，同时会保存到当前路径 wings_cmd.txt / Command to import config on the Wings host; it is also saved to ./wings_cmd.txt:"
     echo "$cmd"
-    echo "$cmd" >> ./wings_cmd.txt
+    echo "$cmd" > ./wings_cmd.txt
+    chmod 600 ./wings_cmd.txt
 }
 
 main() {
-    check_root
-    echo -n "请输入节点名称 [默认: auto-node]: "
-    read -r node_name
-    node_name=${node_name:-auto-node}
-    echo -n "请输入节点内存 (MB) [默认: 1024]: "
-    read -r node_memory
-    node_memory=${node_memory:-1024}
-    if ! [[ "$node_memory" =~ ^[0-9]+$ ]]; then
-        echo "输入必须是数字，将使用默认值"
-        node_memory=1024
-    fi
-    echo -n "请输入内存超分配百分比 [默认: 0]: "
-    read -r node_over_memory
-    node_over_memory=${node_over_memory:-0}
-    if ! [[ "$node_over_memory" =~ ^[0-9]+$ ]]; then
-        echo "输入必须是数字，将使用默认值"
-        node_over_memory=0
-    fi
-    echo -n "请输入节点磁盘 (MB) [默认: 10240]: "
-    read -r node_disk
-    node_disk=${node_disk:-10240}
-    if ! [[ "$node_disk" =~ ^[0-9]+$ ]]; then
-        echo "输入必须是数字，将使用默认值"
-        node_disk=10240
-    fi
-    echo -n "请输入磁盘超分配百分比 [默认: 0]: "
-    read -r node_over_disk
-    node_over_disk=${node_over_disk:-0}
-    if ! [[ "$node_over_disk" =~ ^[0-9]+$ ]]; then
-        echo "输入必须是数字，将使用默认值"
-        node_over_disk=0
-    fi
+    check_root "$@"
+    init_cookie_file
+    node_name=$(read_default "请输入节点名称 / Node name [默认/default: auto-node]: " "auto-node" "${NODE_NAME:-}")
+    node_memory=$(require_number "$(read_default "请输入节点内存 (MB) / Node memory [默认/default: 1024]: " "1024" "${NODE_MEMORY:-}")" "1024")
+    node_over_memory=$(require_number "$(read_default "请输入内存超分配百分比 / Memory overallocation percent [默认/default: 0]: " "0" "${NODE_OVER_MEMORY:-}")" "0")
+    node_disk=$(require_number "$(read_default "请输入节点磁盘 (MB) / Node disk [默认/default: 10240]: " "10240" "${NODE_DISK:-}")" "10240")
+    node_over_disk=$(require_number "$(read_default "请输入磁盘超分配百分比 / Disk overallocation percent [默认/default: 0]: " "0" "${NODE_OVER_DISK:-}")" "0")
     if ! get_ipv4; then
         echo "无法获取IPv4地址，脚本中断"
         exit 1
@@ -383,8 +445,7 @@ main() {
     generate_admin_api_key "$G_PANEL_URL"
     get_latest_node_id
     echo "将使用节点ID: $G_NODE_ID"
-    echo -n "请确认节点ID [默认: $G_NODE_ID]: "
-    read -r input_node_id
+    input_node_id=$(read_default "请确认节点ID / Confirm node ID [默认/default: $G_NODE_ID]: " "$G_NODE_ID" "${NODE_ID:-}")
     if [ -n "$input_node_id" ]; then
         if [[ "$input_node_id" =~ ^[0-9]+$ ]]; then
             G_NODE_ID=$input_node_id
@@ -399,4 +460,4 @@ main() {
     show_wings_install_command "$G_PANEL_URL" "$G_INSTALL_TOKEN" "$G_NODE_ID"
 }
 
-main
+main "$@"

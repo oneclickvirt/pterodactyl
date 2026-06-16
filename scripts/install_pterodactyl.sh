@@ -8,7 +8,11 @@
 ###########################################
 
 export DEBIAN_FRONTEND=noninteractive
-cd /root >/dev/null 2>&1
+PTERODACTYL_PHP_VERSION="${PTERODACTYL_PHP_VERSION:-8.2}"
+INSTALL_COMPLETED=false
+PANEL_DIR="/var/www/pterodactyl"
+ROLLBACK_MARKER="$PANEL_DIR/.oneclickvirt_installing"
+cd "${HOME:-/root}" >/dev/null 2>&1 || cd /tmp || exit 1
 
 # 设置UTF-8语言环境
 setup_locale() {
@@ -26,7 +30,11 @@ setup_locale() {
 # 检查是否为root用户
 check_root() {
     if [ "$(id -u)" != "0" ]; then
-        _red "This script must be run as root" 1>&2
+        if command -v sudo >/dev/null 2>&1; then
+            _yellow "Re-running with sudo. / 正在使用 sudo 重新执行。"
+            exec sudo -E bash "$0" "$@"
+        fi
+        _red "This script must be run as root or by a sudo-capable user. / 此脚本必须由 root 或具备 sudo 权限的用户运行。" 1>&2
         exit 1
     fi
 }
@@ -38,8 +46,6 @@ init_system_vars() {
     RELEASE=("Debian" "Ubuntu" "CentOS" "CentOS" "Fedora" "Arch")
     PACKAGE_UPDATE=("! apt-get update && apt-get --fix-broken install -y && apt-get update" "apt-get update" "yum -y update" "yum -y update" "yum -y update" "pacman -Sy")
     PACKAGE_INSTALL=("apt-get -y install" "apt-get -y install" "yum -y install" "yum -y install" "yum -y install" "pacman -Sy --noconfirm --needed")
-    PACKAGE_REMOVE=("apt-get -y remove" "apt-get -y remove" "yum -y remove" "yum -y remove" "yum -y remove" "pacman -Rsc --noconfirm")
-    PACKAGE_UNINSTALL=("apt-get -y autoremove" "apt-get -y autoremove" "yum -y autoremove" "yum -y autoremove" "yum -y autoremove" "")
     CMD=("$(grep -i pretty_name /etc/os-release 2>/dev/null | cut -d \" -f2)" "$(hostnamectl 2>/dev/null | grep -i system | cut -d : -f2)" "$(lsb_release -sd 2>/dev/null)" "$(grep -i description /etc/lsb-release 2>/dev/null | cut -d \" -f2)" "$(grep . /etc/redhat-release 2>/dev/null)" "$(grep . /etc/issue 2>/dev/null | cut -d \\ -f1 | sed '/^[ ]*$/d')" "$(grep -i pretty_name /etc/os-release 2>/dev/null | cut -d \" -f2)")
     SYS="${CMD[0]}"
     [[ -n $SYS ]] || exit 1
@@ -50,7 +56,7 @@ init_system_vars() {
         fi
     done
     # 设置默认密码
-    mysql_password=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 10)
+    mysql_password=$(generate_password 24)
 }
 
 ###########################################
@@ -58,11 +64,76 @@ init_system_vars() {
 ###########################################
 
 # 彩色输出函数
-_red() { echo -e "\033[31m\033[01m$@\033[0m"; }
-_green() { echo -e "\033[32m\033[01m$@\033[0m"; }
-_yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
-_blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
+_red() { printf '\033[31m\033[01m%s\033[0m\n' "$*"; }
+_green() { printf '\033[32m\033[01m%s\033[0m\n' "$*"; }
+_yellow() { printf '\033[33m\033[01m%s\033[0m\n' "$*"; }
+_blue() { printf '\033[36m\033[01m%s\033[0m\n' "$*"; }
 reading() { read -rp "$(_green "$1")" "$2"; }
+
+random_chars() {
+    local charset="$1" count="$2" chars
+    set +o pipefail
+    chars=$(LC_ALL=C tr -dc "$charset" </dev/urandom | head -c "$count")
+    set -o pipefail 2>/dev/null || true
+    if [ "${#chars}" -lt "$count" ]; then
+        chars="${chars}$(date +%s)$(hostname | tr -dc 'A-Za-z0-9')"
+        chars="${chars:0:$count}"
+    fi
+    printf '%s' "$chars"
+}
+
+generate_password() {
+    local length password
+    length="${1:-24}"
+    [[ "$length" =~ ^[0-9]+$ ]] || length=24
+    if [ "$length" -lt 16 ]; then
+        length=16
+    fi
+    password="$(random_chars 'a-z' 1)$(random_chars 'A-Z' 1)$(random_chars '0-9' 1)$(random_chars '@#%_+=:,.~' 1)$(random_chars 'A-Za-z0-9@#%_+=:,.~' "$((length - 4))")"
+    printf '%s' "$password" | fold -w1 | awk '
+        BEGIN { srand() }
+        { chars[NR] = $0 }
+        END {
+            for (i = NR; i > 1; i--) {
+                j = int(rand() * i) + 1
+                tmp = chars[i]
+                chars[i] = chars[j]
+                chars[j] = tmp
+            }
+            for (i = 1; i <= NR; i++) {
+                printf "%s", chars[i]
+            }
+        }
+    '
+}
+
+mysql_root() {
+    mysql -u root "$@"
+}
+
+rollback_on_error() {
+    local exit_code=$?
+    if [ "$exit_code" -eq 0 ] || [ "$INSTALL_COMPLETED" = true ]; then
+        return 0
+    fi
+    _red "Install failed; rolling back files created by this run. / 安装失败，正在回滚本次创建的文件。"
+    rm -f /root/create_user.sql create_user.sql 2>/dev/null || true
+    if [ -f "$ROLLBACK_MARKER" ]; then
+        systemctl disable --now pteroq.service 2>/dev/null || true
+        rm -f /etc/systemd/system/pteroq.service 2>/dev/null || true
+        rm -f /etc/nginx/sites-enabled/pterodactyl.conf /etc/nginx/sites-available/pterodactyl.conf /etc/nginx/conf.d/pterodactyl.conf 2>/dev/null || true
+        rm -rf "$PANEL_DIR" 2>/dev/null || true
+        mysql_root -e "DROP DATABASE IF EXISTS panel; DROP USER IF EXISTS 'pterodactyl'@'127.0.0.1'; DROP USER IF EXISTS 'pterodactyl'@'localhost'; FLUSH PRIVILEGES;" 2>/dev/null || true
+    fi
+    exit "$exit_code"
+}
+
+run_step() {
+    local label="$1"
+    shift
+    _yellow "$label"
+    "$@"
+}
 
 # 检查并更新包管理器
 check_update() {
@@ -168,7 +239,6 @@ check_ipv4() {
             response=$(curl -s4m8 "$p")
             sleep 1
             if [ $? -eq 0 ] && ! echo "$response" | grep -q "error"; then
-                IP_API="$p"
                 IPV4="$response"
                 break
             fi
@@ -183,8 +253,8 @@ check_ipv4() {
 
 # 检查系统兼容性
 check_system_compatibility() {
-    if [[ "${RELEASE[int]}" != "Debian" && "${RELEASE[int]}" != "Ubuntu" && "${RELEASE[int]}" != "CentOS" ]]; then
-        _red "不支持当前系统: ${RELEASE[int]}"
+    if [[ "${SYSTEM:-}" != "Debian" && "${SYSTEM:-}" != "Ubuntu" && "${SYSTEM:-}" != "CentOS" ]]; then
+        _red "Unsupported OS for the panel installer: ${SYSTEM:-$SYS}. Supported: Debian, Ubuntu, CentOS. / 面板安装脚本不支持当前系统：${SYSTEM:-$SYS}。支持：Debian、Ubuntu、CentOS。"
         exit 1
     fi
 }
@@ -236,9 +306,43 @@ install_system_packages() {
     curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 }
 
+service_exists() {
+    systemctl list-unit-files "$1.service" >/dev/null 2>&1 || systemctl status "$1.service" >/dev/null 2>&1
+}
+
+start_and_verify_service() {
+    local service_name="$1"
+    systemctl enable --now "$service_name"
+    systemctl is-active --quiet "$service_name"
+}
+
+detect_database_service() {
+    if service_exists mariadb; then
+        DATABASE_SERVICE="mariadb"
+    elif service_exists mysql; then
+        DATABASE_SERVICE="mysql"
+    else
+        DATABASE_SERVICE="mariadb"
+    fi
+}
+
+verify_database_service() {
+    detect_database_service
+    start_and_verify_service "$DATABASE_SERVICE"
+    mysqladmin ping --silent
+}
+
+php_fpm_service_name() {
+    if [[ "${RELEASE[int]}" == "Debian" || "${RELEASE[int]}" == "Ubuntu" ]]; then
+        printf 'php%s-fpm' "$PTERODACTYL_PHP_VERSION"
+    else
+        printf 'php-fpm'
+    fi
+}
+
 # 为Debian/Ubuntu安装包
 install_debian_ubuntu_packages() {
-    apt-get -y install software-properties-common curl apt-transport-https ca-certificates gnupg
+    apt-get -y install software-properties-common curl wget lsb-release apt-transport-https ca-certificates gnupg
     # 确定使用的 codename
     # CODENAME=${OVERRIDE_CODENAME:-$(lsb_release -sc)}
     CODENAME=$(lsb_release -sc)
@@ -270,24 +374,14 @@ install_debian_ubuntu_packages() {
         apt-add-repository universe
     fi
     # 更新和安装必要包
-    apt update
-    PHP_VERSIONS=("8.3" "8.2" "8.1")
-    INSTALL_SUCCESS=0
-    for VERSION in "${PHP_VERSIONS[@]}"; do
-        echo "尝试安装 PHP $VERSION..."
-        if apt-get update && apt-get -y install php$VERSION php$VERSION-{common,cli,gd,mysql,mbstring,bcmath,xml,fpm,curl,zip}; then
-            echo "PHP $VERSION 安装成功！"
-            INSTALL_SUCCESS=1
-            break
-        else
-            echo "PHP $VERSION 安装失败，尝试下一个版本..."
-        fi
-    done
-    if [ "$INSTALL_SUCCESS" -ne 1 ]; then
-        echo "所有指定的 PHP 版本都安装失败，退出程序。"
-        exit 1
-    fi
+    apt-get update
+    _yellow "安装锁定 PHP 版本 ${PTERODACTYL_PHP_VERSION} / Installing pinned PHP ${PTERODACTYL_PHP_VERSION}"
+    apt-get -y install "php${PTERODACTYL_PHP_VERSION}" "php${PTERODACTYL_PHP_VERSION}-common" "php${PTERODACTYL_PHP_VERSION}-cli" "php${PTERODACTYL_PHP_VERSION}-gd" "php${PTERODACTYL_PHP_VERSION}-mysql" "php${PTERODACTYL_PHP_VERSION}-mbstring" "php${PTERODACTYL_PHP_VERSION}-bcmath" "php${PTERODACTYL_PHP_VERSION}-xml" "php${PTERODACTYL_PHP_VERSION}-fpm" "php${PTERODACTYL_PHP_VERSION}-curl" "php${PTERODACTYL_PHP_VERSION}-zip"
     apt-get -y install nginx redis-server
+    verify_database_service
+    start_and_verify_service "$(php_fpm_service_name)"
+    start_and_verify_service nginx
+    start_and_verify_service redis-server
 }
 
 # 为CentOS安装包
@@ -296,8 +390,8 @@ install_centos_packages() {
     # yum -y install https://rpms.remirepo.net/enterprise/remi-release-7.rpm
     yum -y install https://rpms.remirepo.net/enterprise/remi-release-8.rpm
     yum -y install yum-utils
-    yum-config-manager --disable remi-php54
-    yum-config-manager --enable remi-php82
+    yum-config-manager --disable 'remi-php*'
+    yum-config-manager --enable "remi-php${PTERODACTYL_PHP_VERSION/./}"
     # 添加Redis仓库
     if [ ! -d /etc/pki/rpm-gpg/redis-archive-keyring.gpg ]; then
         curl -fsSL https://packages.redis.io/gpg | gpg --dearmor -o /etc/pki/rpm-gpg/redis-archive-keyring.gpg
@@ -316,31 +410,15 @@ install_centos_packages() {
         yum -y install mariadb-server
     fi
     # 更新和安装必要包
-    yum update
-    for VERSION in "${PHP_VERSIONS[@]}"; do
-        echo "尝试安装 PHP $VERSION..."
-        yum-config-manager --disable 'remi-php*'
-        yum-config-manager --enable "remi-php${VERSION/./}"
-        if yum -y install php php-{common,cli,gd,mysql,mbstring,bcmath,xml,fpm,curl,zip}; then
-            echo "PHP $VERSION 安装成功！"
-            INSTALL_SUCCESS=1
-            break
-        else
-            echo "PHP $VERSION 安装失败，尝试下一个版本..."
-        fi
-    done
-    if [ "$INSTALL_SUCCESS" -ne 1 ]; then
-        echo "所有指定的 PHP 版本都安装失败，退出程序。"
-        exit 1
-    fi
+    yum -y update
+    _yellow "安装锁定 PHP 版本 ${PTERODACTYL_PHP_VERSION} / Installing pinned PHP ${PTERODACTYL_PHP_VERSION}"
+    yum -y install php php-{common,cli,gd,mysql,mbstring,bcmath,xml,fpm,curl,zip}
     yum -y install nginx redis
     # 启动服务
-    systemctl start mariadb
-    systemctl enable mariadb
-    systemctl start nginx
-    systemctl enable nginx
-    systemctl start redis
-    systemctl enable redis
+    verify_database_service
+    start_and_verify_service nginx
+    start_and_verify_service redis
+    start_and_verify_service "$(php_fpm_service_name)"
 }
 
 ###########################################
@@ -350,16 +428,21 @@ install_centos_packages() {
 # 设置MySQL数据库
 setup_mysql_database() {
     _yellow "配置MySQL数据库"
-    mysql_user="root"
     database_name="panel"
-    # 创建用户和数据库
-    echo "CREATE USER 'pterodactyl'@'127.0.0.1' IDENTIFIED BY '$mysql_password';" >create_user.sql
-    echo "CREATE DATABASE $database_name;" >>create_user.sql
-    echo "GRANT ALL PRIVILEGES ON $database_name.* TO 'pterodactyl'@'localhost' IDENTIFIED BY '$mysql_password' WITH GRANT OPTION;" >>create_user.sql
-    mysql -u $mysql_user -p$mysql_password <create_user.sql
-    rm create_user.sql
-    # 验证连接
-    mysql -u $mysql_user -p$mysql_password -e "exit"
+    verify_database_service
+    cat >create_user.sql <<EOF
+CREATE DATABASE IF NOT EXISTS \`${database_name}\`;
+CREATE USER IF NOT EXISTS 'pterodactyl'@'127.0.0.1' IDENTIFIED BY '${mysql_password}';
+CREATE USER IF NOT EXISTS 'pterodactyl'@'localhost' IDENTIFIED BY '${mysql_password}';
+ALTER USER 'pterodactyl'@'127.0.0.1' IDENTIFIED BY '${mysql_password}';
+ALTER USER 'pterodactyl'@'localhost' IDENTIFIED BY '${mysql_password}';
+GRANT ALL PRIVILEGES ON \`${database_name}\`.* TO 'pterodactyl'@'127.0.0.1' WITH GRANT OPTION;
+GRANT ALL PRIVILEGES ON \`${database_name}\`.* TO 'pterodactyl'@'localhost' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
+EOF
+    mysql_root <create_user.sql
+    rm -f create_user.sql
+    MYSQL_PWD="$mysql_password" mysql -h 127.0.0.1 -u pterodactyl "$database_name" -e "SELECT 1;" >/dev/null
 }
 
 ###########################################
@@ -369,12 +452,15 @@ setup_mysql_database() {
 # 下载并解压Pterodactyl
 download_pterodactyl() {
     _yellow "下载和准备Pterodactyl面板"
-    if [ ! -d /var/www/pterodactyl ]; then
-        mkdir -p /var/www/pterodactyl
+    if [ ! -d "$PANEL_DIR" ]; then
+        mkdir -p "$PANEL_DIR"
     fi
-    cd /var/www/pterodactyl
-    curl -Lo panel.tar.gz https://github.com/pterodactyl/panel/releases/latest/download/panel.tar.gz
+    touch "$ROLLBACK_MARKER"
+    cd "$PANEL_DIR" || exit 1
+    curl -fL --retry 3 --connect-timeout 15 --max-time 180 -o panel.tar.gz https://github.com/pterodactyl/panel/releases/latest/download/panel.tar.gz
+    tar -tzf panel.tar.gz >/dev/null
     tar -xzvf panel.tar.gz
+    rm -f panel.tar.gz
     chmod -R 755 storage/* bootstrap/cache/
 }
 
@@ -446,7 +532,7 @@ install_pterodactyl() {
     # 运行数据库迁移
     php artisan migrate --seed --force --no-interaction
     # 创建管理员用户
-    PASSWORD=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 12)
+    PASSWORD=$(generate_password 20)
     php artisan p:user:make \
         --email=admin@localhost \
         --username=oneclickvirt \
@@ -461,7 +547,7 @@ install_pterodactyl() {
         chown -R nginx:nginx /var/www/pterodactyl/*
     fi
     # 禁用reCAPTCHA
-    if [ -d /var/www/pterodactyl/config/recaptcha.php ]; then
+    if [ -f /var/www/pterodactyl/config/recaptcha.php ]; then
         sed -i "s/'enabled' => env('RECAPTCHA_ENABLED', true),/'disabled' => env('RECAPTCHA_ENABLED', false),/g" "/var/www/pterodactyl/config/recaptcha.php"
     fi
     # 设置环境模式
@@ -481,10 +567,11 @@ install_pterodactyl() {
 setup_cron_job() {
     _yellow "设置Cron作业"
     CRON_JOB="* * * * * php /var/www/pterodactyl/artisan schedule:run >> /dev/null 2>&1"
-    echo "$CRON_JOB" | sudo crontab -u root -l | {
-        cat
-        echo "$CRON_JOB"
-    } | sudo crontab -u root -
+    current_cron="$(mktemp)"
+    sudo crontab -u root -l 2>/dev/null | grep -Fv "$CRON_JOB" >"$current_cron" || true
+    echo "$CRON_JOB" >>"$current_cron"
+    sudo crontab -u root "$current_cron"
+    rm -f "$current_cron"
 }
 
 # 创建队列工作服务
@@ -537,18 +624,11 @@ WantedBy=multi-user.target
 EOL
     fi
     # 启用服务 - 使用正确的Redis服务名
-    systemctl enable --now ${REDIS_SERVICE}.service
+    systemctl enable --now "${REDIS_SERVICE}.service"
     systemctl enable --now pteroq.service
     systemctl enable nginx
-    systemctl enable mariadb
-    # 确定PHP-FPM版本
-    if command -v php8.3 >/dev/null 2>&1; then
-        systemctl enable php8.3-fpm
-    elif command -v php8.1 >/dev/null 2>&1; then
-        systemctl enable php8.1-fpm
-    elif command -v php-fpm >/dev/null 2>&1; then
-        systemctl enable php-fpm
-    fi
+    systemctl enable "$DATABASE_SERVICE"
+    start_and_verify_service "$(php_fpm_service_name)"
 }
 
 ###########################################
@@ -568,46 +648,27 @@ configure_nginx() {
     elif [[ "${RELEASE[int]}" == "CentOS" ]]; then
         nginx_config_path="/etc/nginx/conf.d/pterodactyl.conf"
     fi
-    # 自动检测PHP-FPM版本和socket路径
+    # 使用锁定的PHP-FPM版本和socket路径
     php_fpm_sock=""
-    php_version=""
-    # 检查可能的PHP版本，优先使用较新版本
-    for version in "8.3" "8.2" "8.1" "8.0" "7.4"; do
-        if command -v php$version >/dev/null 2>&1; then
-            php_version=$version
-            break
-        fi
-    done
-    # 如果没找到特定版本，检查是否有通用的php命令
-    if [ -z "$php_version" ] && command -v php >/dev/null 2>&1; then
-        php_version=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')
-    fi
-    _yellow "检测到PHP版本: $php_version"
-    # 检查PHP-FPM socket路径
+    php_version="$PTERODACTYL_PHP_VERSION"
+    fpm_service="$(php_fpm_service_name)"
+    _yellow "使用锁定PHP版本: $php_version / Using pinned PHP version: $php_version"
+    start_and_verify_service "$fpm_service"
     if [[ "${RELEASE[int]}" == "Debian" || "${RELEASE[int]}" == "Ubuntu" ]]; then
         if [ -S "/run/php/php${php_version}-fpm.sock" ]; then
             php_fpm_sock="/run/php/php${php_version}-fpm.sock"
+        else
+            _red "PHP-FPM socket not found for PHP ${php_version}: /run/php/php${php_version}-fpm.sock"
+            exit 1
         fi
     elif [[ "${RELEASE[int]}" == "CentOS" ]]; then
         if [ -S "/var/run/php-fpm/php-fpm.sock" ]; then
             php_fpm_sock="/var/run/php-fpm/php-fpm.sock"
         elif [ -S "/run/php-fpm/www.sock" ]; then
             php_fpm_sock="/run/php-fpm/www.sock"
-        fi
-    fi
-    # 如果仍然没有找到socket，尝试搜索系统中的PHP-FPM socket
-    if [ -z "$php_fpm_sock" ]; then
-        potential_sock=$(find /run -name "php*-fpm.sock" | head -n 1)
-        if [ -n "$potential_sock" ]; then
-            php_fpm_sock=$potential_sock
         else
-            # 如果仍找不到，使用默认路径并发出警告
-            _yellow "警告: 无法找到PHP-FPM socket，使用默认路径。可能需要手动调整配置。"
-            if [[ "${RELEASE[int]}" == "Debian" || "${RELEASE[int]}" == "Ubuntu" ]]; then
-                php_fpm_sock="/run/php/php${php_version}-fpm.sock"
-            else
-                php_fpm_sock="/var/run/php-fpm/php-fpm.sock"
-            fi
+            _red "PHP-FPM socket not found for php-fpm. / 未找到 php-fpm socket。"
+            exit 1
         fi
     fi
     _yellow "使用PHP-FPM socket: $php_fpm_sock"
@@ -652,7 +713,7 @@ server {
     echo "$config" >"$nginx_config_path"
     # 为非CentOS系统创建符号链接
     if [[ "${RELEASE[int]}" != "CentOS" ]]; then
-        ln -s "$nginx_config_path" /etc/nginx/sites-enabled/pterodactyl.conf
+        ln -sf "$nginx_config_path" /etc/nginx/sites-enabled/pterodactyl.conf
     fi
     # 测试配置并重启Nginx
     nginx -t
@@ -663,9 +724,9 @@ server {
 disable_recaptcha_and_2fa() {
     _yellow "禁用reCAPTCHA和2FA要求"
     # 禁用reCAPTCHA (通过数据库方式)
-    mysql -u root -p$mysql_password -e "UPDATE panel.settings SET value = 'false' WHERE \`key\` = 'settings::recaptcha:enabled';"
+    mysql_root -e "UPDATE panel.settings SET value = 'false' WHERE \`key\` = 'settings::recaptcha:enabled';"
     # 禁用2FA要求
-    mysql -u root -p$mysql_password -e "UPDATE panel.settings SET value = 0 WHERE \`key\` = 'settings::pterodactyl:auth:2fa_required';"
+    mysql_root -e "UPDATE panel.settings SET value = 0 WHERE \`key\` = 'settings::pterodactyl:auth:2fa_required';"
     # 备用方式: 尝试通过配置文件禁用reCAPTCHA (以防数据库更新失败)
     if [ -f /var/www/pterodactyl/config/recaptcha.php ]; then
         sed -i "s/'enabled' => env('RECAPTCHA_ENABLED', true),/'enabled' => env('RECAPTCHA_ENABLED', false),/g" "/var/www/pterodactyl/config/recaptcha.php"
@@ -675,7 +736,7 @@ disable_recaptcha_and_2fa() {
 
 # 自动创建默认配置
 setup_auto_config() {
-    cd /var/www/pterodactyl
+    cd /var/www/pterodactyl || exit 1
     php artisan p:location:make --short=Servers --long="Auto Include Servers, do not delete me."
 }
 
@@ -684,30 +745,31 @@ setup_auto_config() {
 ###########################################
 
 main() {
+    trap rollback_on_error EXIT
     # 初始化
-    setup_locale
-    check_root
-    init_system_vars
+    run_step "设置语言环境 / Setting locale" setup_locale || exit 1
+    check_root "$@"
+    run_step "初始化系统变量 / Initializing system variables" init_system_vars || exit 1
     # 系统检查
-    check_system_compatibility
+    run_step "检查系统兼容性 / Checking system compatibility" check_system_compatibility || exit 1
     # 安装过程
-    install_basic_dependencies
-    install_system_packages
+    run_step "安装基础依赖 / Installing base dependencies" install_basic_dependencies || exit 1
+    run_step "安装系统包 / Installing system packages" install_system_packages || exit 1
     # 数据库配置
-    setup_mysql_database
+    run_step "配置数据库 / Configuring database" setup_mysql_database || exit 1
     # Pterodactyl安装
-    download_pterodactyl
-    configure_pterodactyl_env
-    install_pterodactyl
+    run_step "下载Pterodactyl / Downloading Pterodactyl" download_pterodactyl || exit 1
+    run_step "配置Pterodactyl环境 / Configuring Pterodactyl environment" configure_pterodactyl_env || exit 1
+    run_step "安装Pterodactyl / Installing Pterodactyl" install_pterodactyl || exit 1
     # 系统服务配置
-    setup_cron_job
-    create_queue_service
+    run_step "设置Cron / Configuring cron" setup_cron_job || exit 1
+    run_step "创建队列服务 / Creating queue service" create_queue_service || exit 1
     # Nginx配置
-    configure_nginx
+    run_step "配置Nginx / Configuring Nginx" configure_nginx || exit 1
     # 禁用reCAPTCHA和2FA要求
-    disable_recaptcha_and_2fa
+    run_step "调整登录安全选项 / Adjusting login options" disable_recaptcha_and_2fa || exit 1
     # 自动创建默认配置
-    setup_auto_config
+    run_step "创建默认位置 / Creating default location" setup_auto_config || exit 1
     USERNAME="oneclickvirt"
     LOGIN_URL="http://${IPV4}:80/"
     AUTO_USER_FILE="/var/www/pterodactyl/auto_users.txt"
@@ -719,11 +781,14 @@ main() {
     echo "登录页面 (Login URL): $LOGIN_URL" >"$AUTO_USER_FILE"
     echo "用户名 (Username): $USERNAME" >>"$AUTO_USER_FILE"
     echo "密码 (Password): $PASSWORD" >>"$AUTO_USER_FILE"
+    chmod 600 "$AUTO_USER_FILE"
     _green "用户信息已保存到 (User info saved to): $AUTO_USER_FILE"
     _green "您可以使用以下命令查看 (You can check it with):"
     echo "cat $AUTO_USER_FILE"
     echo ""
+    rm -f "$ROLLBACK_MARKER"
+    INSTALL_COMPLETED=true
 }
 
 # 执行主函数
-main
+main "$@"

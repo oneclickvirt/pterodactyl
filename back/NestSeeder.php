@@ -44,6 +44,11 @@ class NestSeeder extends Seeder
         $this->createSourceEngineNest(array_get($items, 'Source Engine'));
         $this->createVoiceServersNest(array_get($items, 'Voice Servers'));
         $this->createRustNest(array_get($items, 'Rust'));
+
+        $vps = $this->repository->findWhere([
+            'name' => 'VPS',
+        ])->first();
+        $this->createVPSNest(is_null($vps) ? null : $vps->toArray());
     }
 
     /**
@@ -106,8 +111,8 @@ class NestSeeder extends Seeder
         }
     }
 
-      /**
-     * Create the Rust nest to be used later on.
+    /**
+     * Create the VPS nest to be used later on.
      *
      * @throws \Pterodactyl\Exceptions\Model\DataValidationException
      */

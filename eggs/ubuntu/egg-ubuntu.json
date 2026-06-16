@@ -27,5 +27,86 @@
             "entrypoint": "bash"
         }
     },
-    "variables": []
+    "variables": [
+        {
+            "name": "Startup Command",
+            "description": "Optional startup command executed once before the interactive shell. / 可选启动命令，会在交互式 shell 前执行一次。",
+            "env_variable": "STARTUP_CMD",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:1024",
+            "field_type": "text"
+        },
+        {
+            "name": "Shell Prompt",
+            "description": "Prompt shown by the built-in shell loop. / 内置 shell 循环显示的提示符。",
+            "env_variable": "SHELL_PROMPT",
+            "default_value": "user@MyVPS:~ ",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:64",
+            "field_type": "text"
+        },
+        {
+            "name": "SSH Port",
+            "description": "Port used by sshd inside the container. / 容器内 sshd 监听端口。",
+            "env_variable": "SSH_PORT",
+            "default_value": "{{server.build.default.port}}",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|integer|between:1,65535",
+            "field_type": "text"
+        },
+        {
+            "name": "Password Authentication",
+            "description": "Enable or disable SSH password authentication. / 是否启用 SSH 密码认证。",
+            "env_variable": "PASSWORD_AUTHENTICATION",
+            "default_value": "yes",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|in:yes,no",
+            "field_type": "text"
+        },
+        {
+            "name": "Public Key Authentication",
+            "description": "Enable or disable SSH public key authentication. / 是否启用 SSH 公钥认证。",
+            "env_variable": "PUBKEY_AUTHENTICATION",
+            "default_value": "yes",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|in:yes,no",
+            "field_type": "text"
+        },
+        {
+            "name": "Root Login Policy",
+            "description": "Root SSH login policy; password root login stays disabled unless explicitly set to yes. / root SSH 登录策略，除非明确设为 yes，否则不开放 root 密码登录。",
+            "env_variable": "PERMIT_ROOT_LOGIN",
+            "default_value": "prohibit-password",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|in:yes,no,prohibit-password,forced-commands-only",
+            "field_type": "text"
+        },
+        {
+            "name": "Requested Memory MB",
+            "description": "Memory value exported to the container for scripts; real allocation is still controlled by the server build settings. / 提供给脚本读取的内存值，真实资源限制仍由服务器构建设置控制。",
+            "env_variable": "SERVER_MEMORY_MB",
+            "default_value": "{{server.build.memory}}",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|integer|min:0",
+            "field_type": "text"
+        },
+        {
+            "name": "Requested Disk MB",
+            "description": "Disk value exported to the container for scripts; real allocation is still controlled by the server build settings. / 提供给脚本读取的磁盘值，真实资源限制仍由服务器构建设置控制。",
+            "env_variable": "SERVER_DISK_MB",
+            "default_value": "{{server.build.disk}}",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|integer|min:0",
+            "field_type": "text"
+        }
+    ]
 }
