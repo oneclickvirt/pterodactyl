@@ -1,0 +1,10 @@
+{
+  "repository": "oneclickvirt/pterodactyl",
+  "skill_name": "oneclickvirt-pterodactyl",
+  "mcp": false,
+  "files": {
+    "agent/profile.json": "ab2bc28ab42bb465deddd6e6d93ed1f9a867f8be6c13111fb5257e5f114bede1",
+    "skills/oneclickvirt-pterodactyl/SKILL.md": "26122d4fb0d4660a1a02373eaa4cb121d0af094da147316a4837d3d1aab3df77",
+    "skills/oneclickvirt-pterodactyl/SKILL_ZH.md": "da89207538cb2b6170dfa5e373f946b252f1cc774e53686c2aa71c119920a517"
+  }
+}

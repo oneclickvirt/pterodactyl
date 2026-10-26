@@ -1,0 +1,29 @@
+{
+  "repository": "oneclickvirt/pterodactyl",
+  "branch": "main",
+  "skill_name": "oneclickvirt-pterodactyl",
+  "purpose": "Deploy Pterodactyl panel/Wings and manage the repository's node import and egg workflows.",
+  "notes": [
+    "Distinguish panel installation, Wings installation and existing-node import. Read scripts/install_pterodactyl.sh, scripts/install_wings.sh or scripts/import_node.sh for the requested operation. Preserve existing database, node credentials and game data."
+  ],
+  "guide": "https://www.spiritlhl.net/guide/agent_integrations.html",
+  "releases": false,
+  "mcp": false,
+  "source_files": [
+    "back/rsync_eggs.sh",
+    "eggs/debian/entrypoint.sh",
+    "eggs/debian/ssh.sh",
+    "eggs/debian/start.sh",
+    "eggs/ssh.sh",
+    "eggs/ubuntu/entrypoint.sh",
+    "eggs/ubuntu/ssh.sh",
+    "eggs/ubuntu/start.sh",
+    "scripts/import_node.sh",
+    "scripts/install_pterodactyl.sh",
+    "scripts/install_wings.sh"
+  ],
+  "purpose_zh": "部署 Pterodactyl 面板和 Wings，处理节点导入及 Egg 工作流。",
+  "notes_zh": [
+    "区分面板安装、Wings 安装和导入现有节点，分别核对 scripts/install_pterodactyl.sh、scripts/install_wings.sh、scripts/import_node.sh。保留已有数据库、节点凭据和游戏数据。"
+  ]
+}
